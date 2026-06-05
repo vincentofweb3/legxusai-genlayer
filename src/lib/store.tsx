@@ -298,10 +298,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? { ...d, status: 'FINALIZED', verdict, confidence, resolvedAt: new Date().toISOString() }
         : d))
       setTransactions(p => [{
-        hash: `${txHash.slice(0, 6)}...vr`,
-        type: 'VERDICT RENDERED', status: 'FINALIZED',
-        time: 'just now', timestamp: Date.now(), detail: `${id}: ${verdict}`,
-      }, ...p].slice(0, 50))
+      hash: `${txHash.slice(0, 6)}...vr`,
+      type: 'VERDICT RENDERED', status: 'FINALIZED' as TxStatus,
+      time: 'just now', timestamp: Date.now(), detail: `${id}: ${verdict}`,
+    }, ...p].slice(0, 50))
       addNotification({ type: 'success', title: 'Verdict Reached', message: `${id} — ${verdict.replace('_', ' ')} (${confidence}% confidence)` })
     }, 12000)
 
