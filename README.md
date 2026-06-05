@@ -1,4 +1,4 @@
-# LegxusAI — AI Dispute Resolution & Prediction Markets on GenLayer
+# LegxusAI - AI Dispute Resolution & Prediction Markets on GenLayer
 
 ## Quick Start
 
@@ -13,9 +13,9 @@ Open **http://localhost:5173**
 
 ## What's Fixed in v2.0
 
-- ✅ Global app state — disputes, predictions, transactions all connected
+- ✅ Global app state - disputes, predictions, transactions all connected
 - ✅ Real MetaMask wallet connection (no more random addresses)
-- ✅ File upload works — click or drag & drop evidence files
+- ✅ File upload works - click or drag & drop evidence files
 - ✅ Submitting a dispute adds it live to the disputes list + dashboard
 - ✅ Staking on predictions updates YES/NO bars + volume in real time
 - ✅ Create Market modal fully functional
@@ -59,7 +59,7 @@ Then update addresses in `src/lib/store.tsx`.
 | Charts | Recharts |
 | Routing | React Router v6 |
 | State | React Context (global store) |
-| Contracts | Python — GenVM SDK |
+| Contracts | Python - GenVM SDK |
 | Fonts | Syne + DM Sans + JetBrains Mono |
 
 ## Links
