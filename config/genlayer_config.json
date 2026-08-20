@@ -1,0 +1,27 @@
+{
+  "developmentEnvironment": "studio",
+  "releaseValidationEnvironment": "bradbury",
+  "toolchain": {
+    "cli": "0.39.2",
+    "sdk": "1.1.8",
+    "genvmRunner": "1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6"
+  },
+  "environments": {
+    "studio": {
+      "label": "Genlayer Studio Network",
+      "alias": "studionet",
+      "purpose": "development",
+      "chainId": 61999,
+      "rpcUrl": "https://studio.genlayer.com/api",
+      "explorerUrl": "https://genlayer-explorer.vercel.app"
+    },
+    "bradbury": {
+      "label": "Genlayer Bradbury Testnet",
+      "alias": "testnet-bradbury",
+      "purpose": "release-validation",
+      "chainId": 4221,
+      "rpcUrl": "https://rpc-bradbury.genlayer.com",
+      "explorerUrl": "https://explorer-bradbury.genlayer.com/"
+    }
+  }
+}

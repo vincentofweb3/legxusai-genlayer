@@ -1,0 +1,18 @@
+networks:
+  default: studionet
+
+  localnet:
+    url: "http://127.0.0.1:4000/api"
+    leader_only: false
+
+  studionet:
+    leader_only: false
+
+  testnet_bradbury:
+    leader_only: false
+
+paths:
+  contracts: "contracts"
+  artifacts: "artifacts"
+
+environment: .env

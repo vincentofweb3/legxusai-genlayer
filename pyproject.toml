@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legxusai-genlayer"
+version = "2.0.0"
+description = "Focused advisory dispute adjudication on GenLayer"
+requires-python = ">=3.12"
+dependencies = [
+    "genlayer-py @ git+https://github.com/genlayerlabs/genlayer-py@a3dc35e04898e3889cbfa855bcaf7d2664675b8f",
+    "genlayer-test @ git+https://github.com/genlayerlabs/genlayer-testing-suite@9c09578b143905471fb0657dd53bdaf18da8e35f",
+    "genvm-linter @ git+https://github.com/genlayerlabs/genvm-linter@fa4a4d4536b28fdc2730e13a983ba01b69ccc6f3",
+    "pytest>=8.0,<9.0",
+    "python-dotenv>=1.0,<2.0",
+    "pyyaml>=6.0,<7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "direct: official genlayer-test direct runner coverage",
+    "integration: tests requiring GenLayer Studio or another configured network",
+]

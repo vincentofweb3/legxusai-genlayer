@@ -1,270 +1,117 @@
 import { useNavigate } from 'react-router-dom'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { Scale, TrendingUp, Zap, Users, ArrowUpRight, Plus, Activity, Clock, CheckCircle2 } from 'lucide-react'
-import { useApp, getStatusColor } from '../lib/store'
+import { Activity, AlertTriangle, ArrowUpRight, CheckCircle2, Network, Plus, RefreshCw, Scale, ShieldCheck } from 'lucide-react'
+import { getStatusColor, useApp } from '../lib/store'
+import { GENLAYER_CONFIG, getNetworkLabel } from '../lib/genlayer/config'
+import { transactionOperationLabel } from '../lib/genlayer/transactions'
 
-const WEEKLY = [
-  { day: 'Mon', disputes: 12, predictions: 34 },
-  { day: 'Tue', disputes: 19, predictions: 41 },
-  { day: 'Wed', disputes: 8, predictions: 28 },
-  { day: 'Thu', disputes: 23, predictions: 52 },
-  { day: 'Fri', disputes: 31, predictions: 67 },
-  { day: 'Sat', disputes: 14, predictions: 38 },
-  { day: 'Sun', disputes: 9, predictions: 21 },
-]
-
-const PIE_DATA = [
-  { name: 'Claimant Wins', color: '#00f5ff' },
-  { name: 'Respondent Wins', color: '#b44eff' },
-  { name: 'Split Decision', color: '#ffd700' },
-  { name: 'Dismissed', color: '#ff2d78' },
-]
-
-const ChartTip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="glass-bright rounded-xl px-3 py-2 text-xs">
-      <div className="font-mono text-slate-400 mb-1">{label}</div>
-      {payload.map((p: any) => (
-        <div key={p.dataKey} className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="font-mono text-white">{p.value} {p.dataKey}</span>
-        </div>
-      ))}
-    </div>
-  )
+function shortValue(value: string | null | undefined): string {
+  if (!value) return 'Not configured'
+  return `${value.slice(0, 10)}...${value.slice(-8)}`
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { wallet, disputes, transactions } = useApp()
+  const { wallet, disputes, disputeLoad, transactions, transactionLoad, refreshCanonicalState } = useApp()
+  const targetNetwork = GENLAYER_CONFIG.network
+  const walletChainVerified = !!wallet.address && !!targetNetwork && wallet.chainId === targetNetwork.chainId
 
-  // Compute live stats from real data
-  const totalDisputes = disputes.length
-  const resolvedThisMonth = disputes.filter(d => d.status === 'FINALIZED' && d.resolvedAt && new Date(d.resolvedAt).getMonth() === new Date().getMonth()).length
-  const claimantWins = disputes.filter(d => d.verdict === 'CLAIMANT_WINS').length
-  const respondentWins = disputes.filter(d => d.verdict === 'RESPONDENT_WINS').length
-  const totalFinalized = claimantWins + respondentWins
-  const pieData = [
-    { name: 'Claimant Wins', value: totalFinalized ? Math.round(claimantWins / totalFinalized * 100) : 48, color: '#00f5ff' },
-    { name: 'Respondent Wins', value: totalFinalized ? Math.round(respondentWins / totalFinalized * 100) : 38, color: '#b44eff' },
-    { name: 'Split Decision', value: 10, color: '#ffd700' },
-    { name: 'Dismissed', value: 4, color: '#ff2d78' },
-  ]
-
+  const open = disputes.filter(dispute => dispute.status !== 'FINALIZED' && dispute.status !== 'DECLINED').length
+  const finalized = disputes.filter(dispute => dispute.status === 'FINALIZED').length
+  const claimantWins = disputes.filter(dispute => dispute.verdict === 'CLAIMANT_UPHELD').length
+  const respondentWins = disputes.filter(dispute => dispute.verdict === 'RESPONDENT_UPHELD').length
+  const undetermined = disputes.filter(dispute => dispute.verdict === 'UNDETERMINED').length
   const recentDisputes = disputes.slice(0, 4)
-  const recentTxs = transactions.slice(0, 6)
+  const recentTransactions = transactions.slice(0, 6)
+
+  const metrics = [
+    { label: 'Canonical disputes', value: disputes.length, detail: disputeLoad.source === 'cache' ? 'Validated scoped cache' : 'Contract state', color: '#00f5ff' },
+    { label: 'Open lifecycle', value: open, detail: 'Awaiting response or evaluation', color: '#ffd166' },
+    { label: 'Finalized outcomes', value: finalized, detail: 'Decoded contract records', color: '#29f588' },
+    { label: 'Known transactions', value: transactions.length, detail: 'Network-validated hashes', color: '#b44eff' },
+  ]
 
   return (
     <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="page-header">Dashboard</h1>
-          <p className="page-sub">
-            GenLayer Testnet ·{' '}
-            {wallet.address ? `Connected: ${wallet.address.slice(0, 10)}...` : 'Wallet not connected'}
-          </p>
+          <h1 className="page-header">Dispute Dashboard</h1>
+          <p className="page-sub">Target: {getNetworkLabel()} · {wallet.address ? `Wallet ${shortValue(wallet.address)}` : 'No wallet account detected'}</p>
         </div>
-        <button onClick={() => navigate('/disputes/new')}
-          className="btn-glass flex items-center gap-2 text-sm">
-          <Plus size={14} /> File Dispute
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => void refreshCanonicalState()} className="btn-glass p-2.5" title="Refresh canonical state"><RefreshCw size={14} /></button>
+          <button onClick={() => navigate('/disputes/new')} className="btn-glass flex items-center gap-2 text-sm"><Plus size={14} /> File Dispute</button>
+        </div>
       </div>
 
-      {/* Stat cards */}
+      <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${disputeLoad.phase === 'cached' ? 'border-yellow-400/25 bg-yellow-400/5' : disputeLoad.phase === 'ready' || disputeLoad.phase === 'empty' ? 'border-emerald-400/20 bg-emerald-400/5' : 'border-red-400/20 bg-red-400/5'}`}>
+        {disputeLoad.phase === 'ready' || disputeLoad.phase === 'empty' ? <CheckCircle2 size={14} className="text-emerald-400 mt-0.5" /> : <AlertTriangle size={14} className={disputeLoad.phase === 'cached' ? 'text-yellow-400 mt-0.5' : 'text-red-400 mt-0.5'} />}
+        <div><div className="font-display font-semibold text-xs text-white">Canonical state: {disputeLoad.phase.replace('-', ' ')}</div><p className="font-body text-[11px] text-slate-400 mt-0.5">{disputeLoad.message}</p></div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: Scale, label: 'Total Disputes', value: totalDisputes.toLocaleString(), sub: `+${resolvedThisMonth} resolved this month`, color: '#00f5ff' },
-          { icon: Zap, label: 'Avg Resolution', value: '41h', sub: 'machine speed consensus', color: '#b44eff' },
-          { icon: TrendingUp, label: 'Volume Settled', value: '$12.4M', sub: 'across all disputes', color: '#00de6a' },
-          { icon: Users, label: 'Active Validators', value: '234', sub: '97.3% accuracy rate', color: '#ffd700' },
-        ].map(({ icon: Icon, label, value, sub, color }) => (
-          <div key={label} className="glass rounded-2xl p-5 card-hover relative overflow-hidden group">
-            <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full blur-2xl opacity-0 group-hover:opacity-20 transition-all duration-500" style={{ background: color }} />
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${color}15`, border: `1px solid ${color}25` }}>
-                <Icon size={17} style={{ color }} />
-              </div>
-              <ArrowUpRight size={13} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
-            </div>
+        {metrics.map(({ label, value, detail, color }) => (
+          <div key={label} className="glass rounded-2xl p-5">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4" style={{ background: `${color}15`, border: `1px solid ${color}25` }}><Scale size={17} style={{ color }} /></div>
             <div className="font-display font-black text-3xl text-white mb-0.5">{value}</div>
-            <div className="font-body text-xs text-slate-500 mb-1">{label}</div>
-            <div className="font-mono text-[10px]" style={{ color }}>{sub}</div>
+            <div className="font-body text-xs text-slate-400">{label}</div>
+            <div className="font-mono text-[10px] mt-1" style={{ color }}>{detail}</div>
           </div>
         ))}
       </div>
 
-      {/* Charts */}
-      <div className="grid lg:grid-cols-3 gap-5">
-        {/* Area chart */}
-        <div className="lg:col-span-2 glass rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="font-display font-bold text-white text-sm">Weekly Activity</h3>
-              <p className="font-body text-xs text-slate-500 mt-0.5">Disputes & predictions filed</p>
-            </div>
-            <div className="flex items-center gap-4">
-              {[{ color: '#00f5ff', label: 'Disputes' }, { color: '#b44eff', label: 'Predictions' }].map(({ color, label }) => (
-                <div key={label} className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                  <span className="font-mono text-[10px] text-slate-400">{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={WEEKLY}>
-              <defs>
-                {[['cyan', '#00f5ff'], ['purple', '#b44eff']].map(([id, color]) => (
-                  <linearGradient key={id} id={`g-${id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                  </linearGradient>
-                ))}
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(28,42,74,0.8)" />
-              <XAxis dataKey="day" tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 11, fontFamily: 'JetBrains Mono' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<ChartTip />} />
-              <Area type="monotone" dataKey="disputes" stroke="#00f5ff" strokeWidth={2} fill="url(#g-cyan)" />
-              <Area type="monotone" dataKey="predictions" stroke="#b44eff" strokeWidth={2} fill="url(#g-purple)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Pie chart */}
+      <div className="grid lg:grid-cols-2 gap-5">
         <div className="glass rounded-2xl p-5">
-          <div className="mb-4">
-            <h3 className="font-display font-bold text-white text-sm">Resolution Outcomes</h3>
-            <p className="font-body text-xs text-slate-500 mt-0.5">All-time verdict distribution</p>
-          </div>
-          <ResponsiveContainer width="100%" height={140}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={62} paddingAngle={3} dataKey="value">
-                {pieData.map((e, i) => <Cell key={i} fill={e.color} opacity={0.9} />)}
-              </Pie>
-              <Tooltip formatter={(v: any) => [`${v}%`, '']} contentStyle={{ background: '#0e1628', border: '1px solid #1c2a4a', borderRadius: 12, fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1.5 mt-1">
-            {pieData.map(({ name, value, color }) => (
-              <div key={name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                  <span className="font-body text-xs text-slate-400">{name}</span>
-                </div>
-                <span className="font-mono text-xs text-white">{value}%</span>
+          <div className="flex items-center justify-between mb-5"><div><h3 className="font-display font-bold text-white text-sm">Canonical outcomes</h3><p className="font-body text-xs text-slate-500 mt-0.5">Decoded from the configured contract state</p></div><CheckCircle2 size={16} className="text-neon-cyan" /></div>
+          <div className="space-y-3">
+            {[
+              ['Claimant upheld', claimantWins, '#00f5ff'],
+              ['Respondent upheld', respondentWins, '#b44eff'],
+              ['Undetermined', undetermined, '#ffd166'],
+            ].map(([label, value, color]) => (
+              <div key={label as string}>
+                <div className="flex items-center justify-between mb-1"><span className="font-body text-xs text-slate-400">{label}</span><span className="font-mono text-xs text-white">{value}</span></div>
+                <div className="h-1.5 rounded-full bg-surface overflow-hidden"><div className="h-full rounded-full" style={{ width: disputes.length ? `${((value as number) / disputes.length) * 100}%` : '0%', background: color as string }} /></div>
               </div>
             ))}
           </div>
         </div>
+
+        <div className="glass rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4"><h3 className="font-display font-bold text-white text-sm flex items-center gap-2"><Network size={14} className="text-neon-cyan" /> Environment</h3><span className={`status-pill ${targetNetwork ? 'text-cyan-400 bg-cyan-400/10 border-cyan-400/30' : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'}`}>{targetNetwork ? 'TARGET SET' : 'UNKNOWN'}</span></div>
+          <div className="space-y-3">
+            {[
+              ['Network', getNetworkLabel()],
+              ['Alias', targetNetwork?.alias ?? '—'],
+              ['Chain ID', targetNetwork?.chainId ?? '—'],
+              ['Contract', shortValue(GENLAYER_CONFIG.contractAddress)],
+              ['Wallet chain', wallet.chainId ?? 'Not detected'],
+              ['Wallet readiness', walletChainVerified ? 'Selected chain verified' : 'Not ready for target'],
+              ['State source', disputeLoad.source ?? 'Unavailable'],
+              ['Settlement', 'Advisory only'],
+            ].map(([label, value]) => <div key={label} className="flex items-center justify-between gap-4"><span className="font-mono text-[10px] text-slate-500 uppercase tracking-wider">{label}</span><span className="font-mono text-xs text-white text-right">{value}</span></div>)}
+          </div>
+          <div className="flex items-start gap-2 mt-4 pt-4 border-t border-border"><ShieldCheck size={13} className="text-yellow-400 mt-0.5" /><p className="font-body text-[11px] text-slate-500 leading-relaxed">No GEN is held, transferred, or released by this release scope.</p></div>
+        </div>
       </div>
 
-      {/* Live TXs + Recent Disputes */}
       <div className="grid lg:grid-cols-2 gap-5">
-        {/* Live transactions — pulls from global store, updates when actions happen */}
         <div className="glass rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-bold text-white text-sm flex items-center gap-2">
-              <Activity size={14} className="text-neon-cyan" /> Live Transactions
-            </h3>
-            <div className="flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-mono text-[10px] text-emerald-400">LIVE</span>
-            </div>
-          </div>
-          {recentTxs.length === 0 ? (
-            <div className="text-center py-8">
-              <Activity size={28} className="text-slate-700 mx-auto mb-2" />
-              <p className="font-body text-xs text-slate-600">No transactions yet</p>
-            </div>
+          <div className="flex items-center justify-between mb-2"><h3 className="font-display font-bold text-white text-sm flex items-center gap-2"><Activity size={14} className="text-neon-cyan" /> Known dispute transactions</h3><button onClick={() => navigate('/explorer')} className="font-mono text-[10px] text-neon-cyan hover:underline flex items-center gap-1">View all <ArrowUpRight size={10} /></button></div>
+          <p className="font-body text-[10px] text-slate-500 mb-4">{transactionLoad.message}</p>
+          {recentTransactions.length === 0 ? (
+            <div className="text-center py-8"><Activity size={28} className="text-slate-700 mx-auto mb-2" /><p className="font-body text-xs text-slate-600">No network-validated transaction hashes are known</p></div>
           ) : (
-            <div className="space-y-2">
-              {recentTxs.map((tx, i) => (
-                <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl" style={{ background: 'rgba(28,42,74,0.3)' }}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(0,245,255,0.1)' }}>
-                      <Zap size={11} className="text-neon-cyan" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-mono text-xs text-white">{tx.type}</div>
-                      <div className="font-mono text-[10px] text-slate-500 truncate">{tx.hash}</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-2">
-                    <span className={`status-pill ${getStatusColor(tx.status)}`}>{tx.status}</span>
-                    <span className="font-mono text-[10px] text-slate-600 flex items-center gap-1">
-                      <Clock size={9} />{tx.time}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="space-y-2">{recentTransactions.map(transaction => <div key={transaction.hash} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-surface/40"><div className="min-w-0"><div className="font-mono text-xs text-white">{transaction.disputeId}</div><div className="font-mono text-[10px] text-neon-cyan">{transactionOperationLabel(transaction.operation)}</div><div className="font-mono text-[10px] text-slate-500 truncate">{transaction.hash}</div></div><span className={`status-pill ml-2 ${getStatusColor(transaction.status)}`}>{transaction.status}</span></div>)}</div>
           )}
         </div>
 
-        {/* Recent disputes — live from global store */}
         <div className="glass rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display font-bold text-white text-sm flex items-center gap-2">
-              <Scale size={14} className="text-neon-purple" /> Recent Disputes
-            </h3>
-            <button onClick={() => navigate('/disputes')} className="font-mono text-[10px] text-neon-cyan hover:underline flex items-center gap-1">
-              View all <ArrowUpRight size={10} />
-            </button>
-          </div>
+          <div className="flex items-center justify-between mb-4"><h3 className="font-display font-bold text-white text-sm flex items-center gap-2"><Scale size={14} className="text-neon-purple" /> Recent disputes</h3><button onClick={() => navigate('/disputes')} className="font-mono text-[10px] text-neon-cyan hover:underline flex items-center gap-1">View all <ArrowUpRight size={10} /></button></div>
           {recentDisputes.length === 0 ? (
-            <div className="text-center py-8">
-              <Scale size={28} className="text-slate-700 mx-auto mb-2" />
-              <p className="font-body text-xs text-slate-600">No disputes filed yet</p>
-              <button onClick={() => navigate('/disputes/new')} className="mt-3 btn-glass text-xs px-3 py-1.5">
-                File your first dispute
-              </button>
-            </div>
+            <div className="text-center py-8"><Scale size={28} className="text-slate-700 mx-auto mb-2" /><p className="font-body text-xs text-slate-600">No canonical disputes available</p></div>
           ) : (
-            <div className="space-y-2">
-              {recentDisputes.map(d => (
-                <div key={d.id} onClick={() => navigate('/disputes')}
-                  className="flex items-center justify-between py-2.5 px-3 rounded-xl cursor-pointer transition-all duration-150 hover:bg-white/5"
-                  style={{ background: 'rgba(28,42,74,0.3)' }}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="font-mono text-[10px] text-neon-cyan bg-neon-cyan/10 px-2 py-0.5 rounded-lg flex-shrink-0">{d.id}</span>
-                    <div className="min-w-0">
-                      <div className="font-body text-xs text-white truncate">{d.title}</div>
-                      <div className="font-mono text-[10px] text-slate-500">{d.amount.toLocaleString()} {d.currency}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    {d.verdict && <CheckCircle2 size={12} className={d.verdict === 'CLAIMANT_WINS' ? 'text-emerald-400' : 'text-neon-purple'} />}
-                    <span className={`status-pill ${getStatusColor(d.status)}`}>
-                      {d.status === 'FINALIZED' ? 'DONE' : d.status.slice(0, 4)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="space-y-2">{recentDisputes.map(dispute => <button key={dispute.id} onClick={() => navigate('/disputes')} className="w-full flex items-center justify-between py-2.5 px-3 rounded-xl text-left hover:bg-white/5 bg-surface/40"><div className="min-w-0"><span className="font-mono text-[10px] text-neon-cyan">{dispute.id}</span><div className="font-body text-xs text-white truncate">{dispute.title}</div></div><span className={`status-pill ml-2 ${getStatusColor(dispute.status)}`}>{dispute.status}</span></button>)}</div>
           )}
-        </div>
-      </div>
-
-      {/* Network info bar */}
-      <div className="glass rounded-2xl p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Network', value: 'Bradbury Testnet', color: '#00de6a' },
-            { label: 'Consensus', value: 'Optimistic Democracy', color: '#00f5ff' },
-            { label: 'VM', value: 'GenVM (WASM + Python)', color: '#b44eff' },
-            { label: 'Security', value: 'Greyboxing Active', color: '#ffd700' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-              <div>
-                <div className="font-mono text-[10px] text-slate-500">{label}</div>
-                <div className="font-mono text-xs text-white">{value}</div>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>

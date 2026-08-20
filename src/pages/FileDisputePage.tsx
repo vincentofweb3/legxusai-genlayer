@@ -1,65 +1,121 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scale, Upload, ArrowLeft, CheckCircle, Loader2, AlertCircle, Zap, X, File } from 'lucide-react'
+import { Scale, ArrowLeft, CheckCircle, Loader2, AlertCircle, Zap, Link2, Trash2 } from 'lucide-react'
 import { useApp, TxStatus } from '../lib/store'
+import { GENLAYER_CONFIG, getNetworkLabel } from '../lib/genlayer/config'
+import {
+  describeEvidenceVerificationError,
+  evidenceOrEmpty,
+  EvidenceVerificationError,
+  type EvidenceReference,
+} from '../lib/evidence/upload'
 
 const TX_STEPS: { status: TxStatus; label: string; desc: string }[] = [
-  { status: 'PENDING', label: 'Broadcasting', desc: 'Sending to GenLayer network' },
-  { status: 'PROPOSING', label: 'AI Proposing', desc: 'Lead validator analyzing evidence' },
-  { status: 'COMMITTING', label: 'Validators Committing', desc: 'Multiple LLMs processing dispute' },
-  { status: 'REVEALING', label: 'Revealing Votes', desc: 'Validators revealing their verdicts' },
-  { status: 'ACCEPTED', label: 'Consensus Reached', desc: 'Majority agreement achieved' },
-  { status: 'FINALIZED', label: 'Finalized On-Chain', desc: 'Dispute locked in Intelligent Contract' },
+  { status: 'PENDING', label: 'Submitting', desc: 'Sending the dispute transaction' },
+  { status: 'ACCEPTED', label: 'Accepted', desc: 'The filing transaction was accepted; the case awaits respondent acceptance' },
+  { status: 'FINALIZED', label: 'Finalized', desc: 'The filing transaction reached GenLayer finalization' },
 ]
-
-const CATEGORIES = ['Service Delivery', 'Payment Dispute', 'Contract Breach', 'IP/Copyright', 'NFT/Token', 'Smart Contract Bug', 'Other']
 
 export default function FileDisputePage() {
   const navigate = useNavigate()
   const { addDispute, isProcessing, processingStatus, processingHash, wallet } = useApp()
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [form, setForm] = useState({ title: '', description: '', respondent: '', amount: '', currency: 'USDC', category: 'Service Delivery', evidenceLinks: '' })
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [form, setForm] = useState({ title: '', description: '', respondent: '', amount: '', currency: 'USDC' })
   const [submitted, setSubmitted] = useState(false)
   const [disputeId, setDisputeId] = useState('')
-  const [dragOver, setDragOver] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [evidenceUrl, setEvidenceUrl] = useState('')
+  const [evidence, setEvidence] = useState<EvidenceReference[]>([])
+  const [evidenceError, setEvidenceError] = useState<string | null>(null)
+  const [isVerifyingEvidence, setIsVerifyingEvidence] = useState(false)
+  const [confirmNoEvidence, setConfirmNoEvidence] = useState(false)
 
   const currentStepIdx = processingStatus ? TX_STEPS.findIndex(s => s.status === processingStatus) : -1
-  const isFinalized = processingStatus === 'FINALIZED'
-
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return
-    const arr = Array.from(files).slice(0, 5)
-    setUploadedFiles(prev => [...prev, ...arr].slice(0, 5))
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    handleFiles(e.dataTransfer.files)
-  }
+  const submissionStopped = submitted && !isProcessing
+  const targetNetwork = GENLAYER_CONFIG.network
+  const filingBlocker = GENLAYER_CONFIG.configurationIssue
+    ?? (!wallet.address
+      ? 'Connect a wallet before filing a dispute.'
+      : wallet.chainId === null
+        ? 'The wallet chain could not be verified. Reconnect the wallet and try again.'
+        : wallet.chainId !== targetNetwork?.chainId
+          ? `Switch the wallet to ${getNetworkLabel()} (chain ${targetNetwork?.chainId}) before filing.`
+          : null)
 
   const handleSubmit = async () => {
     if (!form.title || !form.description || !form.respondent || !form.amount) return
-    setSubmitted(true)
+    setSubmissionError(null)
+    if (filingBlocker) {
+      setSubmissionError(filingBlocker)
+      return
+    }
+    if (!wallet.address) {
+      setSubmissionError('Connect a wallet before filing a dispute.')
+      return
+    }
 
-    const evidenceList = [
-      ...uploadedFiles.map(f => f.name),
-      ...form.evidenceLinks.split('\n').map(s => s.trim()).filter(Boolean),
-    ]
+    if (evidence.length === 0 && !confirmNoEvidence) {
+      setEvidenceError('Confirm that this filing intentionally contains no evidence before signing.')
+      return
+    }
 
-    const id = await addDispute({
-      title: form.title,
-      description: form.description,
-      claimant: wallet.address || '0xAnonymous',
-      respondent: form.respondent,
-      amount: parseFloat(form.amount),
-      currency: form.currency,
-      category: form.category,
-      evidence: evidenceList.length > 0 ? evidenceList : ['No evidence attached'],
-    })
+    let amount: bigint
+    try {
+      amount = BigInt(form.amount)
+      if (amount < 0n) throw new Error('negative')
+    } catch {
+      setSubmissionError('Reference amount must be a non-negative whole number.')
+      return
+    }
+
+    let id = ''
+    try {
+      id = await addDispute({
+        title: form.title,
+        description: form.description,
+        respondent: form.respondent,
+        amount,
+        currency: form.currency,
+        evidence,
+        confirmNoEvidence,
+      })
+    } catch (error) {
+      if (error instanceof EvidenceVerificationError) {
+        const message = describeEvidenceVerificationError(error)
+        setEvidenceError(message)
+        setSubmissionError(message)
+        return
+      }
+      setSubmissionError('The dispute transaction did not start. Check the target, contract address, wallet, and wallet chain, then try again.')
+      return
+    }
+    if (!id) {
+      setSubmissionError('The dispute transaction did not start. Check the target, contract address, wallet, and wallet chain, then try again.')
+      return
+    }
     setDisputeId(id)
+    setSubmitted(true)
+    setConfirmNoEvidence(false)
+  }
+
+  const handleAddEvidence = async () => {
+    if (!evidenceUrl.trim()) return
+    setEvidenceError(null)
+    setIsVerifyingEvidence(true)
+    const result = await evidenceOrEmpty([...evidence.map(reference => reference.url), evidenceUrl])
+    setIsVerifyingEvidence(false)
+    if (result.error) {
+      setEvidenceError(`${result.error.code}: ${result.error.message}`)
+      return
+    }
+    setEvidence(result.references)
+    setEvidenceUrl('')
+  }
+
+  const removeEvidence = (url: string) => {
+    setEvidence(references => references.filter(reference => reference.url !== url))
+    setEvidenceError(null)
+    setConfirmNoEvidence(false)
   }
 
   // Processing / success screen
@@ -74,13 +130,15 @@ export default function FileDisputePage() {
           <div className="text-center mb-8">
             <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4"
               style={{ background: 'linear-gradient(135deg,rgba(0,245,255,0.15),rgba(180,78,255,0.15))', border: '1px solid rgba(0,245,255,0.3)' }}>
-              {isFinalized ? <CheckCircle size={28} className="text-emerald-400" /> : <Zap size={28} className="text-neon-cyan" />}
+              {submissionStopped ? <CheckCircle size={28} className="text-emerald-400" /> : <Zap size={28} className="text-neon-cyan" />}
             </div>
             <h2 className="font-display font-black text-2xl text-white mb-2">
-              {isFinalized ? `${disputeId} Filed!` : 'Processing...'}
+              {submissionStopped ? `${disputeId} Filed` : 'Processing...'}
             </h2>
             <p className="font-body text-slate-400 text-sm">
-              {isFinalized ? 'Your dispute is on-chain. AI validators will reach a verdict within 12–48 hours.' : 'GenLayer validators are processing your dispute'}
+              {submissionStopped
+                ? 'The filing receipt passed status, consensus, execution, and return-value validation. The case now awaits respondent acceptance.'
+                : 'Submitting your dispute transaction'}
             </p>
           </div>
 
@@ -93,8 +151,8 @@ export default function FileDisputePage() {
 
           <div className="space-y-2.5">
             {TX_STEPS.map((step, i) => {
-              const isDone = i < currentStepIdx
-              const isActive = i === currentStepIdx
+              const isDone = i < currentStepIdx || (submissionStopped && i === currentStepIdx)
+              const isActive = !submissionStopped && i === currentStepIdx
               return (
                 <div key={step.status} className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-500 ${isActive ? 'border' : ''}`}
                   style={isActive ? { background: 'rgba(0,245,255,0.05)', borderColor: 'rgba(0,245,255,0.2)' } : {}}>
@@ -123,7 +181,7 @@ export default function FileDisputePage() {
             })}
           </div>
 
-          {isFinalized && (
+          {submissionStopped && (
             <button onClick={() => navigate('/disputes')} className="btn-glass w-full justify-center mt-6 py-3 text-sm">
               View My Disputes
             </button>
@@ -141,13 +199,13 @@ export default function FileDisputePage() {
 
       <div className="mb-6">
         <h1 className="page-header flex items-center gap-2"><Scale size={20} className="text-neon-cyan" /> File a Dispute</h1>
-        <p className="page-sub">Your case will be analyzed by GenLayer AI validators using Optimistic Democracy</p>
+        <p className="page-sub">Submit a dispute through the injected wallet, validate its GenLayer receipt, and refresh the canonical contract state. Respondent response and advisory evaluation continue from the Disputes view.</p>
       </div>
 
-      {!wallet.address && (
+      {(submissionError ?? filingBlocker) && (
         <div className="flex items-center gap-3 p-4 rounded-xl mb-5" style={{ background: 'rgba(255,165,0,0.08)', border: '1px solid rgba(255,165,0,0.2)' }}>
           <AlertCircle size={15} className="text-yellow-400 flex-shrink-0" />
-          <p className="font-body text-xs text-yellow-400">Connect your wallet to sign and submit this dispute on-chain.</p>
+          <p className="font-body text-xs text-yellow-400">{submissionError ?? filingBlocker}</p>
         </div>
       )}
 
@@ -162,84 +220,92 @@ export default function FileDisputePage() {
 
         {/* Description */}
         <div>
-          <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Description *</label>
-          <textarea rows={4} placeholder="Describe the dispute in detail. AI validators will analyze this along with your evidence..."
+            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Description *</label>
+            <textarea rows={4} placeholder="Describe the dispute and the decision criteria..."
             value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
             className="input-field resize-none" />
         </div>
 
-        {/* Respondent + Category */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Respondent */}
+        <div>
           <div>
             <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Respondent Address *</label>
             <input type="text" placeholder="0x..." value={form.respondent}
               onChange={e => setForm(p => ({ ...p, respondent: e.target.value }))}
               className="input-field font-mono text-xs" />
           </div>
-          <div>
-            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Category</label>
-            <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} className="select-field">
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
         </div>
 
         {/* Amount + Currency */}
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-2">
-            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Disputed Amount *</label>
-            <input type="number" placeholder="0.00" value={form.amount}
+            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Reference Amount *</label>
+            <input type="number" min="0" step="1" placeholder="0" value={form.amount}
               onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} className="input-field" />
           </div>
           <div>
-            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Currency</label>
+            <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Reference Currency</label>
             <select value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))} className="select-field">
               {['USDC', 'USDT', 'GEN', 'ETH'].map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Evidence links */}
-        <div>
-          <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Evidence Links / IPFS CIDs</label>
-          <textarea rows={2} placeholder="https://ipfs.io/ipfs/Qm... (one per line)"
-            value={form.evidenceLinks} onChange={e => setForm(p => ({ ...p, evidenceLinks: e.target.value }))}
-            className="input-field resize-none text-xs font-mono" />
+        <div className="rounded-xl p-4" style={{ background: 'rgba(255,165,0,0.05)', border: '1px solid rgba(255,165,0,0.15)' }}>
+          <div className="flex items-start gap-3">
+            <AlertCircle size={13} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-display font-semibold text-xs text-yellow-400 mb-1">Public evidence only</div>
+              <p className="font-body text-[11px] text-slate-400 leading-relaxed">
+                Evidence URLs and their hash, MIME type, size, and source identifier become public contract data. Use only non-sensitive material already published in a public GitHub repository. Repository deletion or provider failure can make content unavailable even when its commit and hash are immutable.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* File upload — fully functional */}
         <div>
-          <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Upload Evidence Files</label>
-          <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.json,.csv,.zip,.eml"
-            className="hidden" onChange={e => handleFiles(e.target.files)} />
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={handleDrop}
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            className="border-2 border-dashed rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer"
-            style={{ borderColor: dragOver ? 'rgba(0,245,255,0.5)' : 'rgba(28,42,74,0.8)', background: dragOver ? 'rgba(0,245,255,0.04)' : 'transparent' }}>
-            <Upload size={20} className={`mx-auto mb-2 ${dragOver ? 'text-neon-cyan' : 'text-slate-600'}`} />
-            <p className="font-body text-xs text-slate-500">
-              {dragOver ? 'Drop files here' : 'Click to browse or drag & drop files'}
-            </p>
-            <p className="font-mono text-[10px] text-slate-600 mt-1">PDF, images, JSON, CSV, ZIP — max 5 files</p>
+          <label className="font-mono text-[10px] text-slate-400 uppercase tracking-widest mb-2 block">Immutable Evidence Reference</label>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              placeholder="https://raw.githubusercontent.com/owner/repo/40-character-commit/path"
+              value={evidenceUrl}
+              onChange={event => {
+                setEvidenceUrl(event.target.value)
+                setEvidenceError(null)
+              }}
+              className="input-field font-mono text-xs min-w-0"
+            />
+            <button
+              type="button"
+              onClick={handleAddEvidence}
+              disabled={!evidenceUrl.trim() || isVerifyingEvidence || evidence.length >= 3}
+              className="btn-glass px-3 flex-shrink-0 disabled:opacity-50"
+              title="Verify evidence reference"
+            >
+              {isVerifyingEvidence ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
+              <span className="hidden sm:inline">Verify</span>
+            </button>
           </div>
-
-          {/* Uploaded file list */}
-          {uploadedFiles.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {uploadedFiles.map((f, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl"
-                  style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.1)' }}>
-                  <div className="flex items-center gap-2">
-                    <File size={12} className="text-neon-cyan" />
-                    <span className="font-mono text-xs text-white">{f.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">({(f.size / 1024).toFixed(1)} KB)</span>
+          <p className="font-body text-[10px] text-slate-500 mt-2 leading-relaxed">
+            Accepted policy: up to 3 text, JSON, or XML resources from raw.githubusercontent.com, pinned to a lowercase 40-character commit SHA and no larger than 2,000 UTF-8 bytes. Browser redirects are rejected before signing.
+          </p>
+          {evidenceError && (
+            <p className="font-mono text-[10px] text-red-400 mt-2">{evidenceError}</p>
+          )}
+          {evidence.length > 0 && (
+            <div className="space-y-2 mt-3">
+              {evidence.map(reference => (
+                <div key={reference.url} className="rounded-lg p-3 flex items-start gap-3" style={{ background: 'rgba(0,245,255,0.04)', border: '1px solid rgba(0,245,255,0.1)' }}>
+                  <CheckCircle size={13} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-[10px] text-white break-all">{reference.source_id}</div>
+                    <div className="font-mono text-[9px] text-slate-500 mt-1 break-all">
+                      SHA-256 {reference.content_hash} · {reference.mime_type} · {reference.byte_size} bytes
+                    </div>
                   </div>
-                  <button onClick={() => setUploadedFiles(p => p.filter((_, j) => j !== i))}
-                    className="text-slate-500 hover:text-red-400 transition-colors">
-                    <X size={12} />
+                  <button type="button" onClick={() => removeEvidence(reference.url)} className="text-slate-500 hover:text-red-400 p-1" title="Remove evidence reference">
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
@@ -254,16 +320,28 @@ export default function FileDisputePage() {
             <div>
               <div className="font-display font-semibold text-xs text-neon-cyan mb-1">How GenLayer resolves this</div>
               <p className="font-body text-[11px] text-slate-400 leading-relaxed">
-                Your dispute is deployed as an Intelligent Contract on GenLayer. Multiple AI validators independently analyze the evidence, fetch live web data for verification, and vote. Optimistic Democracy consensus ensures a majority verdict is reached within hours.
+                The dispute record is submitted through the configured GenLayer environment. After filing, the named respondent can accept or decline and either named party can request the advisory GenVM evaluation from the Disputes view. No funds are transferred, escrowed, released, or refunded.
               </p>
             </div>
           </div>
         </div>
 
+        {evidence.length === 0 && (
+          <label className="flex items-start gap-2 text-[11px] text-slate-400">
+            <input
+              type="checkbox"
+              checked={confirmNoEvidence}
+              onChange={event => setConfirmNoEvidence(event.target.checked)}
+              disabled={isProcessing || isVerifyingEvidence || !!filingBlocker}
+              className="mt-0.5"
+            />
+            <span>I understand this filing will contain no evidence references.</span>
+          </label>
+        )}
         <button onClick={handleSubmit}
-          disabled={isProcessing || !form.title || !form.description || !form.respondent || !form.amount}
+          disabled={isProcessing || isVerifyingEvidence || !!filingBlocker || !form.title || !form.description || !form.respondent || !form.amount || (evidence.length === 0 && !confirmNoEvidence)}
           className="btn-solid w-full justify-center py-4 text-base disabled:opacity-50">
-          {isProcessing ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : <><Scale size={16} /> Submit Dispute On-Chain</>}
+          {isProcessing ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : <><Scale size={16} /> Submit Dispute Transaction</>}
         </button>
       </div>
     </div>
