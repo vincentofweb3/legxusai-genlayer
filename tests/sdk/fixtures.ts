@@ -91,19 +91,82 @@ export function studioResultEnvelope(value: CalldataEncodable): Record<string, u
   }
 }
 
-export function studioReceiptFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function isFixtureRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+export function studioLeaderReceiptFixture(
+  value: CalldataEncodable = 'DSP-0001',
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
+    mode: 'leader',
+    vote: null,
+    execution_result: 'SUCCESS',
+    genvm_result: {
+      stderr: '',
+      stdout: '',
+      raw_error: null,
+      error_code: null,
+      error_description: null,
+    },
+    pending_transactions: [],
+    result: studioResultEnvelope(value),
+    ...overrides,
+  }
+}
+
+export function studioValidatorReceiptFixture(
+  value: CalldataEncodable = 'DSP-0001',
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return studioLeaderReceiptFixture(value, {
+    mode: 'validator',
+    vote: 'agree',
+    ...overrides,
+  })
+}
+
+export function studioReceiptFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const receipt: Record<string, unknown> = {
     hash: TX_HASH,
-    statusName: 'ACCEPTED',
-    resultName: 'AGREE',
-    txExecutionResultName: 'FINISHED_WITH_RETURN',
+    tx_id: TX_HASH,
+    status: 7,
+    statusName: 'FINALIZED',
+    result: 6,
+    result_name: 'MAJORITY_AGREE',
     messages: [],
+    triggered_transactions: [],
     consensus_data: {
-      final: true,
-      leader_receipt: [{ result: resultEnvelope('DSP-0001') }],
+      leader_receipt: [studioLeaderReceiptFixture(), studioValidatorReceiptFixture()],
     },
     ...overrides,
   }
+
+  if (Object.prototype.hasOwnProperty.call(overrides, 'consensus_data')) {
+    const consensusOverrides = overrides.consensus_data
+    if (!isFixtureRecord(consensusOverrides)) return receipt
+
+    const defaultConsensus = receipt.consensus_data
+    if (!isFixtureRecord(defaultConsensus)) return receipt
+
+    const mergedConsensus: Record<string, unknown> = {
+      ...defaultConsensus,
+      ...consensusOverrides,
+    }
+    if (Object.prototype.hasOwnProperty.call(consensusOverrides, 'leader_receipt')) {
+      const leaderOverrides = consensusOverrides.leader_receipt
+      if (Array.isArray(leaderOverrides)) {
+        const defaults = [studioLeaderReceiptFixture(), studioValidatorReceiptFixture()]
+        mergedConsensus.leader_receipt = leaderOverrides.map((entry, index) => isFixtureRecord(entry)
+          ? { ...(defaults[index] ?? studioValidatorReceiptFixture()), ...entry }
+          : entry)
+      }
+    }
+    receipt.consensus_data = mergedConsensus
+  }
+
+  return receipt
 }
 
 export function publicReceiptFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {

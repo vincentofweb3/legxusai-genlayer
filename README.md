@@ -29,7 +29,7 @@ Not included as working functionality:
 - GenLayer protocol appeals.
 - Complete network transaction history. The contract exposes canonical dispute state, but not a complete transaction index; the Explorer shows only locally retained hashes that are revalidated against GenLayer.
 - Private browser-file upload, arbitrary providers, and claims of permanent storage or availability.
-- Live Studio/Bradbury deployment and transaction evidence. Stage A uses mocked SDK/provider tests plus direct contract tests; those are not a substitute for deployed multi-validator execution.
+- Complete live lifecycle evidence. The reviewed contract is deployed on Studio, but respondent acceptance, GenVM evaluation, and finalized canonical-result proof remain separate review gates. No Bradbury deployment has been verified.
 
 ## Network And Toolchain
 
@@ -76,7 +76,7 @@ VITE_GENLAYER_ENV=studio
 VITE_DISPUTE_CONTRACT_ADDRESS=
 ```
 
-Accepted browser environment values are `studio` and `bradbury`. The contract address must remain empty until a deployment is independently verified for that environment. Python/CLI-oriented checks use `GENLAYER_ENV` explicitly in the command and should select the same target as `VITE_GENLAYER_ENV`.
+Accepted browser environment values are `studio` and `bradbury`. The independently verified Studio address is recorded in `deployments/studio.json`; use it only with `VITE_GENLAYER_ENV=studio`. A contract address for any other environment must remain empty until independently verified there. Python/CLI-oriented checks use `GENLAYER_ENV` explicitly in the command and should select the same target as `VITE_GENLAYER_ENV`.
 
 The Python configuration can be checked without invoking a global CLI:
 
@@ -162,14 +162,14 @@ See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, fai
 
 ## Deployment Manifest Shape
 
-`deployments/studio.template.json` and `deployments/bradbury.template.json` define the sanitized public record shape. They contain null deployment fields and are not proof of deployment. A reviewed manifest may contain only public deployment evidence:
+`deployments/studio.json` records the independently verified Studio deployment tied to source commit `33286c8f57f2bc0b517ccf1a1ec457f040e13ee1`. The template files retain null deployment fields and are not proof of another deployment. A reviewed manifest may contain only public deployment evidence:
 
 - application and environment name;
 - CLI network alias, chain ID, RPC, and explorer URL;
 - public contract address and deployment transaction hash;
 - CLI, SDK, and GenVM runner versions.
 
-Credential material is never a manifest field. No concrete deployment manifest is committed because no deployment has been verified for this remediation phase; see `deployments/README.md`.
+Credential material is never a manifest field. The Studio manifest proves deployed source/address/receipt facts only; it does not by itself prove filing, respondent authorization, evaluation, or final advisory state. See `deployments/README.md`.
 
 ## Project Structure
 
@@ -180,6 +180,7 @@ config/
   genlayer_config.json
   genlayer_config.py
 deployments/
+  studio.json
   studio.template.json
   bradbury.template.json
 src/

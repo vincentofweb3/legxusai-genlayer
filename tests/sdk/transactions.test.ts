@@ -14,13 +14,19 @@ import {
   CHILD_HASH,
   publicReceiptFixture,
   publicTraceFixture,
+  studioLeaderReceiptFixture,
   studioReceiptFixture,
   studioResultEnvelope,
+  studioValidatorReceiptFixture,
   TX_HASH,
 } from './fixtures.ts'
 
 test('decodes the official Studio consensus leader receipt route', () => {
-  assert.deepEqual(decodeLeaderReturnValues(studioReceiptFixture()), ['DSP-0001'])
+  const receipt = studioReceiptFixture()
+  assert.equal(receipt.result_name, 'MAJORITY_AGREE')
+  assert.equal('resultName' in receipt, false)
+  assert.equal('txExecutionResultName' in receipt, false)
+  assert.deepEqual(decodeLeaderReturnValues(receipt), ['DSP-0001', 'DSP-0001'])
   const envelopeReceipt = studioReceiptFixture({
     consensus_data: { final: true, leader_receipt: [{ result: studioResultEnvelope('DSP-0001') }] },
   })
@@ -35,7 +41,10 @@ test('decodes the official Bradbury trace route without consensus_data', () => {
 })
 
 test('validates common public transaction fields and retains the full submitted hash', () => {
-  const validated = validateSuccessfulTransaction(publicReceiptFixture(), TX_HASH, [], { allowTriggeredTransactions: false })
+  const validated = validateSuccessfulTransaction(publicReceiptFixture(), TX_HASH, [], {
+    allowTriggeredTransactions: false,
+    returnRoute: 'public-trace',
+  })
   assert.equal(validated.hash, TX_HASH)
   assert.equal(validated.status, 'ACCEPTED')
   assert.equal(validated.executionResult, 'FINISHED_WITH_RETURN')
@@ -47,13 +56,17 @@ test('distinguishes common status, consensus, execution, and malformed receipt f
     [{ statusName: 'CANCELED' }, 'status'],
     [{ statusName: 'UNDETERMINED' }, 'status'],
     [{ statusName: 'VALIDATORS_TIMEOUT' }, 'status'],
+    [{ resultName: undefined, result_name: 'MAJORITY_AGREE' }, 'decode'],
     [{ resultName: 'NO_MAJORITY' }, 'consensus'],
     [{ txExecutionResultName: 'FINISHED_WITH_ERROR' }, 'execution'],
     [{ txId: `0x${'c'.repeat(64)}` }, 'decode'],
   ]
   for (const [overrides, kind] of cases) {
     assert.throws(
-      () => validateSuccessfulTransaction(publicReceiptFixture(overrides), TX_HASH, [], { allowTriggeredTransactions: false }),
+      () => validateSuccessfulTransaction(publicReceiptFixture(overrides), TX_HASH, [], {
+        allowTriggeredTransactions: false,
+        returnRoute: 'public-trace',
+      }),
       error => error instanceof GenLayerTransactionError && error.kind === kind,
     )
   }
@@ -61,20 +74,127 @@ test('distinguishes common status, consensus, execution, and malformed receipt f
 
 test('validates and retains triggered transaction IDs only when allowed', () => {
   const receipt = publicReceiptFixture({ messages: [{ recipient: '0x1' }] })
-  const validated = validateSuccessfulTransaction(receipt, TX_HASH, [CHILD_HASH], { allowTriggeredTransactions: true })
+  const validated = validateSuccessfulTransaction(receipt, TX_HASH, [CHILD_HASH], {
+    allowTriggeredTransactions: true,
+    returnRoute: 'public-trace',
+  })
   assert.deepEqual(validated.triggeredTransactionIds, [CHILD_HASH])
   assert.throws(
-    () => validateSuccessfulTransaction(receipt, TX_HASH, [], { allowTriggeredTransactions: true }),
+    () => validateSuccessfulTransaction(receipt, TX_HASH, [], {
+      allowTriggeredTransactions: true,
+      returnRoute: 'public-trace',
+    }),
     error => error instanceof GenLayerTransactionError && error.kind === 'triggered',
   )
   assert.throws(
-    () => validateSuccessfulTransaction(publicReceiptFixture(), TX_HASH, [CHILD_HASH], { allowTriggeredTransactions: false }),
+    () => validateSuccessfulTransaction(publicReceiptFixture(), TX_HASH, [CHILD_HASH], {
+      allowTriggeredTransactions: false,
+      returnRoute: 'public-trace',
+    }),
     error => error instanceof GenLayerTransactionError && error.kind === 'triggered',
   )
   assert.throws(
-    () => validateSuccessfulTransaction(publicReceiptFixture({ messages: [{ recipient: '0x1' }] }), TX_HASH, [], { allowTriggeredTransactions: false }),
+    () => validateSuccessfulTransaction(publicReceiptFixture({ messages: [{ recipient: '0x1' }] }), TX_HASH, [], {
+      allowTriggeredTransactions: false,
+      returnRoute: 'public-trace',
+    }),
     error => error instanceof GenLayerTransactionError && error.kind === 'triggered',
   )
+})
+
+test('validates the exact Studio projection without camelCase consensus or transaction execution fields', () => {
+  const validated = validateSuccessfulTransaction(studioReceiptFixture(), TX_HASH, [], {
+    allowTriggeredTransactions: false,
+    returnRoute: 'studio-receipt',
+  })
+  assert.equal(validated.hash, TX_HASH)
+  assert.equal(validated.status, 'FINALIZED')
+  assert.equal(validated.result, 'MAJORITY_AGREE')
+  assert.equal(validated.executionResult, 'FINISHED_WITH_RETURN')
+})
+
+test('Studio validation fails closed for status, consensus, execution, return, and hash defects', () => {
+  const failures: Array<[Record<string, unknown>, GenLayerTransactionError['kind']]> = [
+    [{ statusName: undefined }, 'decode'],
+    [{ statusName: 'PENDING' }, 'status'],
+    [{ result_name: undefined, resultName: 'MAJORITY_AGREE' }, 'decode'],
+    [{ result_name: 'NO_MAJORITY' }, 'consensus'],
+    [{ hash: undefined, tx_id: undefined }, 'decode'],
+    [{ tx_id: `0x${'c'.repeat(64)}` }, 'decode'],
+    [{ consensus_data: { leader_receipt: [] } }, 'decode'],
+    [{
+      txExecutionResultName: 'FINISHED_WITH_RETURN',
+      consensus_data: { leader_receipt: [studioLeaderReceiptFixture('DSP-0001', { execution_result: undefined })] },
+    }, 'decode'],
+    [{ consensus_data: { leader_receipt: [studioLeaderReceiptFixture('DSP-0001', { execution_result: 'ERROR' })] } }, 'execution'],
+    [{
+      consensus_data: {
+        leader_receipt: [
+          studioLeaderReceiptFixture(),
+          studioValidatorReceiptFixture('DSP-0001', { execution_result: 'ERROR' }),
+        ],
+      },
+    }, 'execution'],
+    [{ consensus_data: { leader_receipt: [studioLeaderReceiptFixture('DSP-0001', { result: undefined })] } }, 'decode'],
+    [{ consensus_data: { leader_receipt: [studioLeaderReceiptFixture('DSP-0001', { result: { status: 'error', payload: { raw: [] } } })] } }, 'decode'],
+    [{ consensus_data: { leader_receipt: [studioLeaderReceiptFixture('DSP-0001', { mode: 'worker' })] } }, 'decode'],
+    [{ consensus_data: { leader_receipt: [studioLeaderReceiptFixture(), studioLeaderReceiptFixture()] } }, 'decode'],
+  ]
+  for (const [overrides, kind] of failures) {
+    assert.throws(
+      () => validateSuccessfulTransaction(studioReceiptFixture(overrides), TX_HASH, [], {
+        allowTriggeredTransactions: false,
+        returnRoute: 'studio-receipt',
+      }),
+      error => error instanceof GenLayerTransactionError && error.kind === kind,
+    )
+  }
+})
+
+test('Studio validation rejects messages, child transactions, and disagreeing leader returns', async () => {
+  const clients = [
+    {
+      receipt: studioReceiptFixture({ messages: [{ kind: 'unexpected' }] }),
+      triggered: [] as string[],
+      kind: 'triggered' as const,
+    },
+    {
+      receipt: studioReceiptFixture(),
+      triggered: [CHILD_HASH],
+      kind: 'triggered' as const,
+    },
+    {
+      receipt: studioReceiptFixture({
+        consensus_data: {
+          leader_receipt: [
+            studioLeaderReceiptFixture('DSP-0001'),
+            studioValidatorReceiptFixture('DSP-0002'),
+          ],
+        },
+      }),
+      triggered: [] as string[],
+      kind: 'consensus' as const,
+    },
+  ]
+  for (const { receipt, triggered, kind } of clients) {
+    const client = {
+      waitForTransactionReceipt: async () => ({}),
+      getTransaction: async () => receipt,
+      getTriggeredTransactionIds: async () => triggered,
+      debugTraceTransaction: async () => { throw new Error('Studio must not use a public trace') },
+    }
+    await assert.rejects(
+      async () => {
+        const validated = await waitForValidatedTransaction(client, TX_HASH, {
+          retries: 1,
+          interval: 1,
+          returnRoute: 'studio-receipt',
+        })
+        decodeCanonicalDisputeId(validated.returnValues)
+      },
+      error => error instanceof GenLayerTransactionError && error.kind === kind,
+    )
+  }
 })
 
 test('rejects malformed or unbound Bradbury traces', () => {
@@ -107,7 +227,7 @@ test('selects Studio and Bradbury return routes explicitly while waiting', async
     interval: 1,
     returnRoute: 'studio-receipt',
   })
-  assert.deepEqual(studio.returnValues, ['DSP-0001'])
+  assert.deepEqual(studio.returnValues, ['DSP-0001', 'DSP-0001'])
   assert.deepEqual(studioCalls, ['wait', 'get', 'triggered'])
 
   const publicCalls: string[] = []

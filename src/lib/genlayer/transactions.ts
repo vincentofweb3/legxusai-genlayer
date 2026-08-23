@@ -212,6 +212,16 @@ export function decodePublicTraceReturnValues(trace: unknown, expectedHashValue:
 }
 
 export function decodeLeaderReturnValues(receipt: unknown): unknown[] {
+  const entries = readStudioLeaderReceipts(receipt)
+  return entries.map((entry, index) => {
+    if (!Object.prototype.hasOwnProperty.call(entry, 'result')) {
+      throw new GenLayerTransactionError('decode', `Leader receipt ${index} has no contract result.`)
+    }
+    return decodeResultEnvelope(entry.result)
+  })
+}
+
+function readStudioLeaderReceipts(receipt: unknown): Record<string, unknown>[] {
   if (!isRecord(receipt) || !isRecord(receipt.consensus_data)) {
     throw new GenLayerTransactionError('decode', 'The transaction receipt has no consensus data.')
   }
@@ -220,13 +230,12 @@ export function decodeLeaderReturnValues(receipt: unknown): unknown[] {
   if (entries.length === 0 || entries[0] === undefined) {
     throw new GenLayerTransactionError('decode', 'The transaction receipt has no leader receipt.')
   }
-  const values = entries.map((entry, index) => {
-    if (!isRecord(entry) || !Object.prototype.hasOwnProperty.call(entry, 'result')) {
-      throw new GenLayerTransactionError('decode', `Leader receipt ${index} has no contract result.`)
+  return entries.map((entry, index) => {
+    if (!isRecord(entry)) {
+      throw new GenLayerTransactionError('decode', `Leader receipt ${index} is malformed.`)
     }
-    return decodeResultEnvelope(entry.result)
+    return entry
   })
-  return values
 }
 
 function readRequiredString(receipt: Record<string, unknown>, field: string): string {
@@ -238,14 +247,64 @@ function readRequiredString(receipt: Record<string, unknown>, field: string): st
 }
 
 function validateReceiptHash(receipt: Record<string, unknown>, expectedHash: TransactionHash): void {
-  const candidates = [receipt.hash, receipt.txId].filter(candidate => candidate !== undefined)
-  if (candidates.length === 0) return
+  const candidates = [receipt.hash, receipt.txId, receipt.tx_id].filter(candidate => candidate !== undefined)
+  if (candidates.length === 0) {
+    throw new GenLayerTransactionError('decode', 'The transaction receipt has no full transaction hash.')
+  }
   for (const candidate of candidates) {
     const receiptHash = decodeTransactionHash(candidate, 'receipt hash')
     if (receiptHash.toLowerCase() !== expectedHash.toLowerCase()) {
       throw new GenLayerTransactionError('decode', 'The receipt hash does not match the submitted transaction hash.')
     }
   }
+}
+
+function readConsensusResult(
+  receipt: Record<string, unknown>,
+  returnRoute: TransactionReturnRoute,
+): ValidatedTransaction['result'] {
+  const field = returnRoute === 'studio-receipt' ? 'result_name' : 'resultName'
+  const result = readRequiredString(receipt, field)
+  if (result !== 'AGREE' && result !== 'MAJORITY_AGREE') {
+    throw new GenLayerTransactionError('consensus', `Consensus did not agree on the transaction result (received ${result}).`)
+  }
+  return result
+}
+
+function validateStudioExecution(receipt: Record<string, unknown>): 'FINISHED_WITH_RETURN' {
+  const entries = readStudioLeaderReceipts(receipt)
+  let leaderCount = 0
+  entries.forEach((entry, index) => {
+    const mode = readRequiredString(entry, 'mode')
+    if (mode !== 'leader' && mode !== 'validator') {
+      throw new GenLayerTransactionError('decode', `Leader receipt ${index} has an unsupported execution mode.`)
+    }
+    if (mode === 'leader') leaderCount += 1
+
+    const executionResult = readRequiredString(entry, 'execution_result')
+    if (executionResult !== 'SUCCESS') {
+      throw new GenLayerTransactionError('execution', `Leader receipt ${index} execution failed (received ${executionResult}).`)
+    }
+    if (!Object.prototype.hasOwnProperty.call(entry, 'result')) {
+      throw new GenLayerTransactionError('decode', `Leader receipt ${index} has no contract result.`)
+    }
+    // Studio omits transaction-level txExecutionResultName. A successful
+    // execution_result plus a decodable return envelope is the official
+    // genlayer-js@1.1.8 proof that this execution finished with a return.
+    decodeResultEnvelope(entry.result)
+  })
+  if (leaderCount !== 1) {
+    throw new GenLayerTransactionError('decode', 'The Studio receipt must contain exactly one leader execution.')
+  }
+  return 'FINISHED_WITH_RETURN'
+}
+
+function validatePublicExecution(receipt: Record<string, unknown>): 'FINISHED_WITH_RETURN' {
+  const executionResult = readRequiredString(receipt, 'txExecutionResultName')
+  if (executionResult !== 'FINISHED_WITH_RETURN') {
+    throw new GenLayerTransactionError('execution', `Contract execution did not finish with a return value (received ${executionResult}).`)
+  }
+  return executionResult
 }
 
 export function decodeTriggeredTransactionIds(value: unknown): TransactionHash[] {
@@ -261,7 +320,10 @@ export function validateSuccessfulTransaction(
   receiptValue: unknown,
   expectedHashValue: unknown,
   triggeredValue: unknown,
-  options: { allowTriggeredTransactions: boolean },
+  options: {
+    allowTriggeredTransactions: boolean
+    returnRoute: TransactionReturnRoute
+  },
 ): ValidatedTransaction {
   const expectedHash = decodeTransactionHash(expectedHashValue)
   if (!isRecord(receiptValue)) throw new GenLayerTransactionError('decode', 'The transaction receipt is malformed.')
@@ -277,14 +339,10 @@ export function validateSuccessfulTransaction(
     throw new GenLayerTransactionError('status', `The transaction is not accepted or finalized (received ${status}).`)
   }
 
-  const result = readRequiredString(receiptValue, 'resultName')
-  if (result !== 'AGREE' && result !== 'MAJORITY_AGREE') {
-    throw new GenLayerTransactionError('consensus', `Consensus did not agree on the transaction result (received ${result}).`)
-  }
-  const executionResult = readRequiredString(receiptValue, 'txExecutionResultName')
-  if (executionResult !== 'FINISHED_WITH_RETURN') {
-    throw new GenLayerTransactionError('execution', `Contract execution did not finish with a return value (received ${executionResult}).`)
-  }
+  const result = readConsensusResult(receiptValue, options.returnRoute)
+  const executionResult = options.returnRoute === 'studio-receipt'
+    ? validateStudioExecution(receiptValue)
+    : validatePublicExecution(receiptValue)
 
   if (receiptValue.messages !== undefined && !Array.isArray(receiptValue.messages)) {
     throw new GenLayerTransactionError('decode', 'The transaction messages field is malformed.')
@@ -362,6 +420,7 @@ export async function waitForValidatedTransaction(
   }
   const validated = validateSuccessfulTransaction(receipt, hash, triggered, {
     allowTriggeredTransactions: options.allowTriggeredTransactions ?? false,
+    returnRoute: options.returnRoute,
   })
   return {
     ...validated,
@@ -378,7 +437,7 @@ export function decodeCanonicalDisputeId(values: unknown[]): string {
     return value
   })
   if (new Set(ids).size !== 1) {
-    throw new GenLayerTransactionError('decode', 'Leader receipts disagree on the canonical dispute identifier.')
+    throw new GenLayerTransactionError('consensus', 'Leader receipts disagree on the canonical dispute identifier.')
   }
   return ids[0]
 }
@@ -515,7 +574,10 @@ export async function hydrateKnownTransactions(
         client.getTransaction({ hash: record.hash }),
         client.getTriggeredTransactionIds({ hash: record.hash }),
       ])
-      const transaction = validateSuccessfulTransaction(receipt, record.hash, triggered, { allowTriggeredTransactions: false })
+      const transaction = validateSuccessfulTransaction(receipt, record.hash, triggered, {
+        allowTriggeredTransactions: false,
+        returnRoute,
+      })
       const returnValues = await decodeNetworkReturnValues(client, receipt, record.hash, returnRoute)
       const decoded = decodeKnownTransactionReturn(record, returnValues)
       transactions.push({
