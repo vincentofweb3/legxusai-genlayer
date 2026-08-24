@@ -127,6 +127,18 @@ export function studioValidatorReceiptFixture(
   })
 }
 
+export function studioQuorumShortCircuitValidatorFixture(): Record<string, unknown> {
+  return {
+    mode: 'validator',
+    vote: 'idle',
+    execution_result: 'ERROR',
+    result: { status: 'contract_error' },
+    genvm_result: {
+      error_code: 'CONSENSUS_VALIDATOR_QUORUM_REACHED',
+    },
+  }
+}
+
 export function studioReceiptFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const receipt: Record<string, unknown> = {
     hash: TX_HASH,

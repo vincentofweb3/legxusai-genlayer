@@ -5,6 +5,7 @@ import {
   decodeCanonicalDisputeId,
   decodeLeaderReturnValues,
   decodePublicTraceReturnValues,
+  decodeSuccessfulBooleanReturn,
   hydrateKnownFilingTransactions,
   isWalletRejection,
   validateSuccessfulTransaction,
@@ -15,6 +16,7 @@ import {
   publicReceiptFixture,
   publicTraceFixture,
   studioLeaderReceiptFixture,
+  studioQuorumShortCircuitValidatorFixture,
   studioReceiptFixture,
   studioResultEnvelope,
   studioValidatorReceiptFixture,
@@ -111,6 +113,62 @@ test('validates the exact Studio projection without camelCase consensus or trans
   assert.equal(validated.status, 'FINALIZED')
   assert.equal(validated.result, 'MAJORITY_AGREE')
   assert.equal(validated.executionResult, 'FINISHED_WITH_RETURN')
+})
+
+test('accepts the exact Studio validator quorum-short-circuit marker', () => {
+  const receipt = studioReceiptFixture({
+    consensus_data: {
+      leader_receipt: [
+        studioLeaderReceiptFixture(true),
+        studioQuorumShortCircuitValidatorFixture(),
+      ],
+    },
+  })
+  const validated = validateSuccessfulTransaction(receipt, TX_HASH, [], {
+    allowTriggeredTransactions: false,
+    returnRoute: 'studio-receipt',
+  })
+  assert.equal(validated.executionResult, 'FINISHED_WITH_RETURN')
+  const values = decodeLeaderReturnValues(receipt)
+  assert.deepEqual(values, [true])
+  assert.equal(decodeSuccessfulBooleanReturn(values, 'ACCEPT_DISPUTE'), true)
+})
+
+test('keeps successful Studio validator returns in the consensus set', () => {
+  const receipt = studioReceiptFixture({
+    consensus_data: {
+      leader_receipt: [
+        studioLeaderReceiptFixture(true),
+        studioValidatorReceiptFixture(true),
+      ],
+    },
+  })
+  assert.deepEqual(decodeLeaderReturnValues(receipt), [true, true])
+})
+
+test('rejects altered Studio quorum-short-circuit markers', () => {
+  const marker = studioQuorumShortCircuitValidatorFixture()
+  const alteredMarkers: Array<Record<string, unknown>> = [
+    { ...marker, vote: 'agree' },
+    { ...marker, result: { status: 'error' } },
+    { ...marker, genvm_result: { error_code: 'OTHER_ERROR' } },
+    { ...marker, execution_result: 'FAILED' },
+    { ...marker, result: undefined },
+    { ...marker, genvm_result: undefined },
+  ]
+  for (const altered of alteredMarkers) {
+    assert.throws(
+      () => validateSuccessfulTransaction(studioReceiptFixture({
+        consensus_data: {
+          leader_receipt: [studioLeaderReceiptFixture(true), altered],
+        },
+      }), TX_HASH, [], {
+        allowTriggeredTransactions: false,
+        returnRoute: 'studio-receipt',
+      }),
+      error => error instanceof GenLayerTransactionError && error.kind === 'execution',
+    )
+  }
 })
 
 test('Studio validation fails closed for status, consensus, execution, return, and hash defects', () => {

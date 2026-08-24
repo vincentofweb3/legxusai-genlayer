@@ -188,6 +188,20 @@ function decodeResultEnvelope(value: unknown): unknown {
   return decodeCalldata(bytesFromArray(value.payload.raw, 'leader receipt payload.raw'))
 }
 
+const STUDIO_QUORUM_SHORT_CIRCUIT_ERROR = 'CONSENSUS_VALIDATOR_QUORUM_REACHED'
+
+function isStudioQuorumShortCircuitValidator(entry: Record<string, unknown>): boolean {
+  const result = entry.result
+  const genvmResult = entry.genvm_result
+  return entry.mode === 'validator'
+    && entry.execution_result === 'ERROR'
+    && entry.vote === 'idle'
+    && isRecord(result)
+    && result.status === 'contract_error'
+    && isRecord(genvmResult)
+    && genvmResult.error_code === STUDIO_QUORUM_SHORT_CIRCUIT_ERROR
+}
+
 /** Decode the public SDK's transaction-hash-bound debug trace return surface. */
 export function decodePublicTraceReturnValues(trace: unknown, expectedHashValue: unknown): unknown[] {
   const expectedHash = decodeTransactionHash(expectedHashValue)
@@ -213,7 +227,7 @@ export function decodePublicTraceReturnValues(trace: unknown, expectedHashValue:
 
 export function decodeLeaderReturnValues(receipt: unknown): unknown[] {
   const entries = readStudioLeaderReceipts(receipt)
-  return entries.map((entry, index) => {
+  return entries.filter(entry => !isStudioQuorumShortCircuitValidator(entry)).map((entry, index) => {
     if (!Object.prototype.hasOwnProperty.call(entry, 'result')) {
       throw new GenLayerTransactionError('decode', `Leader receipt ${index} has no contract result.`)
     }
@@ -280,6 +294,8 @@ function validateStudioExecution(receipt: Record<string, unknown>): 'FINISHED_WI
       throw new GenLayerTransactionError('decode', `Leader receipt ${index} has an unsupported execution mode.`)
     }
     if (mode === 'leader') leaderCount += 1
+
+    if (mode === 'validator' && isStudioQuorumShortCircuitValidator(entry)) return
 
     const executionResult = readRequiredString(entry, 'execution_result')
     if (executionResult !== 'SUCCESS') {
