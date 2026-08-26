@@ -22,4 +22,10 @@ npm run genlayer -- network --help
 
 The verified CLI selection forms are `npm run genlayer -- network set studionet` for development and `npm run genlayer -- network set testnet-bradbury` for release validation. Selection changes CLI configuration and must be an explicit operator action.
 
-The Studio deployment is verified, but deployment alone is not proof of the complete dispute lifecycle. Filing, respondent acceptance, GenVM evaluation, and final canonical-state evidence are reviewed as separate gates. No Bradbury deployment has been verified.
+The Studio deployment is verified. Separate receipt-backed evidence now verifies the `DSP-0001` demonstration from filing through respondent acceptance, GenVM evaluation, receipt validation, and canonical final state:
+
+- Filing: `0x0d3c289df8bd3c2f141e9ff2e26858a5a0c766759b767b50f12d7d9574d1ed20`.
+- Respondent acceptance: `0xb81751f7e393bdd2267ce6b2fc64d60263a23f481ef991c7db2154b4e55aa15f`.
+- Evaluation: `0x0935963f09eeb8f83816a54e7526915d2345311e8535914473a8b09ad23e0dea`, agreed outcome `UNDETERMINED`.
+
+The hashes are public verification evidence, not credentials. This evidence is scoped to Studio `studionet` / chain `61999`; no Bradbury deployment or lifecycle evidence has been verified. Protocol appeals, escrow, settlement, fees, bonds, payouts, transfers, and a complete network transaction index remain outside this release. See [../docs/GENLAYER_VALIDATION.md](../docs/GENLAYER_VALIDATION.md) for the bounded verification record and [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) for the trust boundaries.

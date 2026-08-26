@@ -29,7 +29,25 @@ Not included as working functionality:
 - GenLayer protocol appeals.
 - Complete network transaction history. The contract exposes canonical dispute state, but not a complete transaction index; the Explorer shows only locally retained hashes that are revalidated against GenLayer.
 - Private browser-file upload, arbitrary providers, and claims of permanent storage or availability.
-- Complete live lifecycle evidence. The reviewed contract is deployed on Studio, but respondent acceptance, GenVM evaluation, and finalized canonical-result proof remain separate review gates. No Bradbury deployment has been verified.
+- Bradbury deployment or Bradbury lifecycle evidence. The verified public lifecycle below is scoped to the Studio demonstration only.
+
+## Verified Studio Lifecycle
+
+The following receipt-backed path has been independently verified for `DSP-0001` on GenLayer Studio:
+
+`file_dispute` → respondent `accept_dispute` → GenVM `evaluate` → receipt validation → canonical `FINALIZED` state.
+
+| Step | Public transaction hash | Verified result |
+|---|---|---|
+| Filing | `0x0d3c289df8bd3c2f141e9ff2e26858a5a0c766759b767b50f12d7d9574d1ed20` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; decodes to `DSP-0001` |
+| Respondent acceptance | `0xb81751f7e393bdd2267ce6b2fc64d60263a23f481ef991c7db2154b4e55aa15f` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; strict return `true` |
+| GenVM evaluation | `0x0935963f09eeb8f83816a54e7526915d2345311e8535914473a8b09ad23e0dea` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; agreed outcome `UNDETERMINED` |
+
+The demonstration uses Studio `studionet` (chain `61999`) and the public deployment manifest [deployments/studio.json](deployments/studio.json). The reviewed application verifier checkpoint is `ba5cbcad44fc0a35819fde0f5f9cc3b40d94d1a9`; the deployment manifest separately records the reviewed deployed-source commit. These hashes are public verification evidence, not credentials.
+
+Fresh canonical reads after evaluation return `DISPUTE_STATE_V3`, exactly `DSP-0001`, `status=FINALIZED`, `criteria_status=RESPONDENT_ACCEPTED`, a non-empty evaluation timestamp, and `verdict=UNDETERMINED`. The evaluated record reports `AVAILABLE` evidence, one available and zero failed references, `INSUFFICIENT_EVIDENCE`, source error `NONE`, confidence bucket `0`, and `INSUFFICIENT` evidence sufficiency.
+
+This is a bounded advisory demonstration. It does not claim Bradbury deployment, protocol appeals, escrow, settlement, fees, bonds, stakes, payouts, transfers, or a complete network transaction index. Public GitHub evidence remains subject to repository retention, access, provider availability, and network availability limits.
 
 ## Network And Toolchain
 
@@ -158,7 +176,7 @@ At most three claimant references and three respondent references are accepted, 
 
 Evidence URLs, hashes, metadata, and dispute context become public contract data. Submit only material already intended for public GitHub visibility. A commit-pinned URL binds the bytes to a repository revision, but it does not guarantee indefinite provider retention: repository deletion, access changes, provider outages, or network failure can still make retrieval unavailable. This release remains advisory-only; evidence storage, protocol appeals, and settlement are separate concerns.
 
-See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, failure taxonomy, verification sequence, and test coverage.
+See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, failure taxonomy, verification sequence, and test coverage. See [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md) for the public Studio evidence and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the trust-boundary model.
 
 ## Deployment Manifest Shape
 
@@ -169,7 +187,7 @@ See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, fai
 - public contract address and deployment transaction hash;
 - CLI, SDK, and GenVM runner versions.
 
-Credential material is never a manifest field. The Studio manifest proves deployed source/address/receipt facts only; it does not by itself prove filing, respondent authorization, evaluation, or final advisory state. See `deployments/README.md`.
+Credential material is never a manifest field. The manifest establishes deployment facts; the separate receipt-backed filing, acceptance, evaluation, and canonical-state evidence for `DSP-0001` is documented in [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md). See [deployments/README.md](deployments/README.md) for the deployment-record boundary.
 
 ## Project Structure
 
@@ -211,6 +229,8 @@ tests/
   evidence/upload.test.ts
 docs/
   evidence-policy.md
+  GENLAYER_VALIDATION.md
+  ARCHITECTURE.md
 ```
 
 ## References
