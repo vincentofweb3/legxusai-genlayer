@@ -51,7 +51,7 @@ The canonical record also preserves the filed title, description, named parties,
 
 ## Reproducible local validation
 
-Run these commands from the repository root. They are deterministic/local checks unless explicitly labeled otherwise:
+Run these commands from the repository root with Node.js 22.x and Python 3.12.x. They are deterministic/local checks unless explicitly labeled otherwise:
 
 ```bash
 npm ci
@@ -59,19 +59,37 @@ npm run typecheck
 npm test
 npm run test:filing
 npm ls genlayer genlayer-js --depth=0
+npm audit --omit=dev
+npm audit --audit-level=high
 npm run build
 ```
 
-The direct contract and GenVM gates, when the pinned Python environment is available, are:
+The production audit must report zero vulnerabilities. The complete-tree audit rejects every high or critical advisory. The reviewed lockfile has two moderate development-only findings at `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`. They do not enter the browser production tree, and the pinned GenLayer CLI is retained instead of applying an unverified transitive UUID major override. Re-evaluate this exception when a reviewed CLI release updates the Docker dependency path.
+
+Install the pinned Python/GenLayer toolchain before running the direct, integration, and GenVM gates:
+
+```bash
+python3 --version
+python3 -m pip install --constraint constraints.txt -r requirements.txt
+python3 scripts/check_dependency_pins.py --installed
+```
+
+The direct contract, read-only Studio integration, and GenVM gates are:
 
 ```bash
 PYTHONPATH=. python3 -m pytest tests/direct -v
-python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
-python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
-python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+PYTHONPATH=. python3 -m pytest tests/integration -v -m integration -rs
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+rm -rf -- artifacts .pytest_cache
+find contracts tests config -type d -name __pycache__ -prune -exec rm -rf -- {} +
+bash scripts/check_repository_hygiene.sh
 ```
 
-Mocked SDK tests exercise typed calldata, provider guards, receipt-shape failures, route selection, and strict return decoders. Direct contract tests exercise the contract in an in-memory/direct runner. Neither category is a public multi-validator transaction. The three hashes above are the separate receipt-backed Studio evidence.
+`requirements.txt` pins the reviewed GenLayer package commits and exact test/tool versions. `constraints.txt` records the resolved public dependency versions used by the validated Python 3.12 installation. Direct contract tests exercise the contract in the official in-memory/direct runner. The integration suite reads the three reviewed public transactions and canonical Studio state without signing, deploying, or changing network state. It skips only for DNS/TLS/socket/timeout or temporary 502/503/504 transport unavailability, and fails for malformed responses, RPC errors, missing or mismatched receipts, invalid calldata, or canonical-state mismatches. The GenVM commands select the reviewed `genlayerlabs/genvm` release bundle explicitly with `GENVM_REPO` and `GENVM_VERSION`; the contract's `py-genlayer` dependency hash remains pinned in its header. Python tests may create ignored `artifacts/`, `__pycache__/`, or `.pytest_cache/` output; remove those directories before the hygiene check. The three hashes above are the separate receipt-backed Studio evidence.
+
+The same checks run in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) with immutable action revisions. CI builds to a temporary directory and removes all validation-generated output before its redacted hygiene and diff checks. No CI job has wallet credentials and no integration job performs a write.
 
 ## Sanitized read-only Studio check
 

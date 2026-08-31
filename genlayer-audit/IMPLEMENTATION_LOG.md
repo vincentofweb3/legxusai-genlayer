@@ -1216,3 +1216,83 @@ PASS — documentation-only correction complete; independent Review #35 required
 ### Reviewer Status
 
 PENDING INDEPENDENT REVIEW #35
+
+## Phase 8 — Release Readiness And Reproducibility
+
+Date: 2026-08-30
+Objective: Make the verified Studio advisory lifecycle reproducible and automatable without changing contract behavior, network state, or later-phase scope.
+
+### Changes
+
+- Added a read-only `tests/integration/` suite for the reviewed Studio `studionet` / chain `61999` deployment. It validates the three public lifecycle receipts, exact transaction hashes and calldata, zero-value and zero-side-effect invariants, GenLayer return decoding, the observed quorum-short-circuit marker, canonical `DISPUTE_STATE_V3` / `DSP-0001` final state, and explicit transport-failure behavior.
+- Integration transport handling now skips only DNS, TLS, socket, timeout, and temporary gateway failures. HTTP authorization errors, malformed JSON, RPC errors, receipt mismatches, invalid calldata, and canonical-state mismatches fail the suite. Requests use a fixed non-secret user agent accepted by Studio.
+- Added `.github/workflows/ci.yml` with immutable action revisions and separate Node/Python jobs covering npm install, typecheck, SDK/evidence/filing tests, temporary-output build, exact dependency checks, official direct tests, read-only integration tests, GenVM lint/schema/strict typecheck, hygiene, and diff checks. CI has no wallet credentials and performs no writes.
+- Added `constraints.txt` and exact Python tool pins for the reviewed GenLayer packages, test tools, and resolved public dependencies. Added `scripts/check_dependency_pins.py` to validate manifest, lockfile, action, and installed dependency pins without printing sensitive values.
+- Expanded `scripts/check_repository_hygiene.sh` to scan the full repository (excluding only Git metadata, installed `node_modules`, and the scanner itself) for credential artifacts, private-key markers, secret assignments/object fields, credential-shaped filenames, and generated output.
+- Updated `README.md` and `docs/GENLAYER_VALIDATION.md` with the exact Python install command, GenVM repository/version variables, integration skip policy, cleanup procedure, CI link, and reproducibility prerequisites.
+
+### Validation
+
+- `npm ci`: **PASS**.
+- `npm run typecheck`: **PASS**.
+- `npm test`: **PASS**.
+- `npm run test:filing`: **PASS**.
+- `npm ls genlayer genlayer-js --depth=0`: **PASS**, exact `genlayer@0.39.2` and `genlayer-js@1.1.8`.
+- Temporary Vite build outside the repository: **PASS**; output removed.
+- Python 3.12 isolated installation from `requirements.txt` constrained by `constraints.txt`: **PASS**.
+- Installed dependency/action pin checker: **PASS**.
+- Official direct contract suite: **PASS**, 32 tests.
+- Read-only Studio integration suite: **PASS**, 5 tests against the reviewed public hashes and canonical state.
+- GenVM lint: **PASS** with `GENVM_REPO=genlayerlabs/genvm`, `GENVM_VERSION=v0.3.0-rc7`.
+- GenVM schema extraction: **PASS**.
+- GenVM strict typecheck: **PASS**.
+- Shell/Python/YAML syntax checks: **PASS**.
+- Redacted hygiene scan: **PASS**, zero unsafe credential paths, generated/cache directories, private-key markers, secret assignments/object fields, credential-shaped filenames, and `.env` secret/64-hex matches.
+- `git diff --check`: **PASS**.
+
+### Result
+
+PASS — Phase 8 reproducibility implementation and local validation complete. No contract behavior, account, wallet, deployment, transaction, network, Bradbury, appeal, settlement, escrow, fee, bond, payout, transfer, or financial feature was changed. Generated output was removed after validation. Independent Review #37 is required before any further scope decision.
+
+### Reviewer Status
+
+PENDING INDEPENDENT REVIEW #37
+
+## Phase 8 Correction — Dependency Security
+
+Date: 2026-08-31
+Objective: Resolve BLOCKER-041 by eliminating production dependency advisories, rejecting high/critical complete-tree findings in CI, and preserving the reviewed GenLayer pins and Studio-only scope.
+
+### Changes
+
+- Upgraded the browser router to exact `react-router-dom@7.18.3` / `react-router@7.18.3`, the first currently patched release line for the new React Router advisories. Existing route, navigation, and link APIs remained type- and build-compatible.
+- Upgraded the development build chain to exact `vite@7.3.6`, `@vitejs/plugin-react@5.1.4`, and `postcss@8.5.26` on the repository's pinned Node `22.23.2` CI runtime.
+- Added reviewed overrides for `brace-expansion@1.1.18`, `js-yaml@4.3.2`, and `nanoid@3.3.18`, replacing the vulnerable transitive resolutions without changing `genlayer@0.39.2` or `genlayer-js@1.1.8`.
+- Added CI gates for a zero-advisory production tree (`npm audit --omit=dev`) and zero high/critical findings in the complete tree (`npm audit --audit-level=high`). Registry or audit-endpoint failure makes either command fail; it is not converted into a pass.
+- Documented the remaining two moderate development-only findings on `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`. This path is excluded from the browser production tree. The pinned CLI is retained because forcing a transitive UUID major override lacks upstream compatibility evidence and is outside this correction's authorization.
+
+### Validation
+
+- Clean `npm ci`: **PASS** on Node `22.23.2` / npm `10.9.8`.
+- `npm audit --omit=dev`: **PASS**, zero vulnerabilities.
+- `npm audit --audit-level=high`: **PASS**, zero high/critical findings; two documented moderate development-only findings remain.
+- `npm run typecheck`: **PASS**.
+- `npm test`: **PASS**, all SDK and evidence suites.
+- `npm run test:filing`: **PASS**.
+- Network-enabled evidence suite: **PASS**, 16 tests.
+- `npm ls genlayer genlayer-js --depth=0`: **PASS**, exact `genlayer@0.39.2` and `genlayer-js@1.1.8`.
+- Vite `7.3.6` production build: **PASS**.
+- Installed Python/action pin verification: **PASS**.
+- Official direct contract suite: **PASS**, 32 tests.
+- Network-enabled read-only Studio integration suite: **PASS**, 5 passed and 0 skipped.
+- GenVM lint, schema extraction, and strict typecheck: **PASS** with the existing pinned runner configuration.
+- Final hygiene and generated-output checks: **PASS**, with zero findings and no generated/cache directories remaining.
+- Working-tree `git diff --check`: **PASS**. Staged diff and immutable parent/path checks are performed immediately around checkpoint creation.
+
+### Result
+
+PASS — BLOCKER-041 correction and Phase 8 revalidation are complete and ready for the required immutable child checkpoint. No production contract/application behavior, GenLayer pin, account, wallet, deployment, transaction, network, Bradbury, appeal, settlement, escrow, fee, bond, payout, transfer, or financial behavior changed.
+
+### Reviewer Status
+
+PENDING INDEPENDENT REVIEW #38

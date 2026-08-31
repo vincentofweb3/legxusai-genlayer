@@ -1,9 +1,16 @@
-# Official GenLayer Phase 2 toolchain pins.
-# The contract header pins the same py-genlayer runner hash.
+# Reproducible Python 3.12 validation toolchain.
+# The three GenLayer packages are pinned to reviewed source commits; the
+# public release dependencies are exact-pinned to the versions validated in
+# the Phase 8 isolated installation.  The contract header and linter commands
+# additionally pin GENVM_REPO=genlayerlabs/genvm and GENVM_VERSION=v0.3.0-rc7.
 genlayer-py @ git+https://github.com/genlayerlabs/genlayer-py@a3dc35e04898e3889cbfa855bcaf7d2664675b8f
 genlayer-test @ git+https://github.com/genlayerlabs/genlayer-testing-suite@9c09578b143905471fb0657dd53bdaf18da8e35f
 genvm-linter @ git+https://github.com/genlayerlabs/genvm-linter@fa4a4d4536b28fdc2730e13a983ba01b69ccc6f3
-cloudpickle>=3.0,<4.0
-pytest>=8.0,<9.0
-python-dotenv>=1.0,<2.0
-pyyaml>=6.0,<7.0
+cloudpickle==3.1.1
+pytest==8.3.3
+python-dotenv==1.1.0
+PyYAML==6.0.3
+web3==7.13.0
+click==8.3.1
+numpy==2.2.6
+pyright==1.1.408

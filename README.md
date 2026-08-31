@@ -120,6 +120,8 @@ npm test
 npm run test:sdk
 npm run test:filing
 npm run typecheck
+npm audit --omit=dev
+npm audit --audit-level=high
 npm run build
 ```
 
@@ -129,17 +131,23 @@ npm run build
 RUN_EVIDENCE_NETWORK=1 npm run test:evidence
 ```
 
-This command is an explicitly labeled live-provider check and requires network access. It retrieves only the pinned public fixture and does not print its body. The official direct-mode contract tests use the pinned Python requirements:
+This command is an explicitly labeled live-provider check and requires network access. It retrieves only the pinned public fixture and does not print its body. The official direct-mode and read-only integration tests use Python 3.12 and the repository's exact dependency constraints:
 
 ```bash
-python3 -m pip install -r requirements.txt
+python3 --version  # 3.12.x
+python3 -m pip install --constraint constraints.txt -r requirements.txt
+python3 scripts/check_dependency_pins.py --installed
 PYTHONPATH=. python3 -m pytest tests/direct -v
-python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
-python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
-python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+PYTHONPATH=. python3 -m pytest tests/integration -v -m integration -rs
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+rm -rf -- artifacts .pytest_cache
+find contracts tests config -type d -name __pycache__ -prune -exec rm -rf -- {} +
+bash scripts/check_repository_hygiene.sh
 ```
 
-Direct mode validates contract behavior in memory; it is not a substitute for Studio multi-validator execution. Do not treat the deleted standalone fake runtime as protocol evidence.
+`npm audit --omit=dev` must report zero production vulnerabilities. The complete-tree audit fails the release gate for any high or critical finding. The reviewed lockfile retains two moderate development-only advisories on `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`; that CLI-only path is outside the browser production tree, and forcing a transitive UUID major override would change the pinned GenLayer toolchain without upstream compatibility evidence. `requirements.txt` pins the reviewed GenLayer package commits and exact test/tool versions; `constraints.txt` pins their resolved public dependencies. Direct mode validates contract behavior in memory, while `tests/integration/` performs read-only checks against the reviewed Studio hashes and canonical state. Integration tests skip only when DNS, TLS, socket, timeout, or temporary gateway transport is unavailable; malformed JSON/RPC errors, missing receipts, receipt mismatches, and canonical-state failures remain test failures. The integration suite never signs, deploys, or mutates network state. Do not treat the deleted standalone fake runtime as protocol evidence. Python validation may create ignored `artifacts/`, `__pycache__/`, or `.pytest_cache/` output; remove those directories before the hygiene check.
 
 ## Architecture
 
@@ -220,6 +228,8 @@ src/
     ContractsPage.tsx
 tests/
   direct/test_dispute_resolution.py
+  integration/conftest.py
+  integration/test_studio_lifecycle.py
   sdk/client.test.ts
   sdk/types.test.ts
   sdk/transactions.test.ts
@@ -231,6 +241,9 @@ docs/
   evidence-policy.md
   GENLAYER_VALIDATION.md
   ARCHITECTURE.md
+scripts/
+  check_dependency_pins.py
+  check_repository_hygiene.sh
 ```
 
 ## References
