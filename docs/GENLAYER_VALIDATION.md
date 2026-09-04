@@ -64,7 +64,7 @@ npm audit --audit-level=high
 npm run build
 ```
 
-The production audit must report zero vulnerabilities. The complete-tree audit rejects every high or critical advisory. The reviewed lockfile has two moderate development-only findings at `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`. They do not enter the browser production tree, and the pinned GenLayer CLI is retained instead of applying an unverified transitive UUID major override. Re-evaluate this exception when a reviewed CLI release updates the Docker dependency path.
+As of `2026-09-04T02:22:57Z`, after a clean `npm ci` against the npm registry, the production audit (`npm audit --omit=dev`) reported zero vulnerabilities and the complete-tree high-threshold audit (`npm audit --audit-level=high`) exited successfully with no high or critical findings. This is a time-stamped validation result, not a permanent guarantee; rerun both commands against the current registry. The corrected lockfile resolves `browserslist@4.28.8` and `postcss-selector-parser@6.1.3`. The validation retained two moderate development-only findings at `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`; they do not enter the browser production tree, and the pinned GenLayer CLI is retained instead of applying an unverified transitive UUID major override. Re-evaluate this exception when a reviewed CLI release updates the Docker dependency path.
 
 Install the pinned Python/GenLayer toolchain before running the direct, integration, and GenVM gates:
 

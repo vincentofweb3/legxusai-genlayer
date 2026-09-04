@@ -1296,3 +1296,51 @@ PASS — BLOCKER-041 correction and Phase 8 revalidation are complete and ready 
 ### Reviewer Status
 
 PENDING INDEPENDENT REVIEW #38
+
+## Phase 9 Correction — Dependency Advisory Drift (BLOCKER-042)
+
+Date: 2026-09-04
+Objective: Resolve the current registry-level dependency advisories without changing the verified Studio advisory lifecycle, GenLayer contract, application behavior, or pinned toolchain.
+
+### Changes
+
+- Added the minimal root npm overrides `browserslist@4.28.8` and `postcss-selector-parser@6.1.3`.
+- Regenerated `package-lock.json` with npm; no lockfile content was hand-edited.
+- Preserved `genlayer@0.39.2`, `genlayer-js@1.1.8`, `vite@7.3.6`, `@vitejs/plugin-react@5.1.4`, `postcss@8.5.26`, the existing overrides, and all Python/GenVM pins.
+- Updated README and validation documentation to identify the audit outcome as a timestamped registry check rather than a permanent security guarantee.
+- Kept the `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0` development-only exception explicit; no global UUID major override was applied.
+
+### Validation
+
+- Clean `npm ci`: **PASS**.
+- `npm audit --omit=dev`: **PASS**, zero vulnerabilities.
+- `npm audit --audit-level=high`: **PASS**, no high or critical findings; two moderate development-only findings remain in the pinned CLI path.
+- `npm ls browserslist postcss-selector-parser dockerode uuid --all`: **PASS**, patched Browserslist/selector-parser resolutions and the documented Dockerode UUID path.
+- `npm ls genlayer genlayer-js --depth=0`: **PASS**, exact `genlayer@0.39.2` and `genlayer-js@1.1.8`.
+- `npm run typecheck`: **PASS**.
+- `npm test`: **PASS**.
+- `npm run test:filing`: **PASS**.
+- `npm run build`: **PASS**; generated `dist/` removed afterward.
+- `RUN_EVIDENCE_NETWORK=1 npm run test:evidence`: **PASS**, 16 tests.
+- Installed dependency/action pin checker: **PASS**.
+- Official direct contract suite: **PASS**, 32 tests.
+- Read-only Studio integration suite: **PASS**, 5 passed and 0 skipped.
+- GenVM lint: **PASS**.
+- GenVM schema extraction: **PASS**.
+- GenVM strict typecheck: **PASS**.
+- Redacted repository hygiene scan: **PASS**, zero credential or generated-output findings.
+- `git diff --check` and `git diff --cached --check`: **PASS**.
+
+### Scope And Safety
+
+- No contract, application TypeScript, receipt/evidence logic, deployment manifest, `.env`, account, wallet, transaction, deployment, network, Bradbury, appeal, settlement, escrow, fee, bond, payout, transfer, or financial behavior changed.
+- The network-enabled Studio suite remained read-only and verified the existing public lifecycle only.
+- Generated `dist/`, `artifacts/`, `__pycache__/`, and `.pytest_cache/` output was removed after validation; preserved untracked audit/diagnostic files remain outside the contribution boundary.
+
+### Result
+
+PASS — BLOCKER-042 dependency correction and validation complete; immutable child checkpoint creation and independent Review #40 remain required.
+
+### Reviewer Status
+
+PENDING INDEPENDENT REVIEW #40
