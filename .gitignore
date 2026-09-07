@@ -1,1 +1,15 @@
-node_modules
+node_modules/
+dist/
+artifacts/
+__pycache__/
+*.pyc
+
+.env
+.env.*
+!.env.example
+
+exported-key.json
+deploy.mjs
+decrypt-key.mjs
+*.pem
+*.key

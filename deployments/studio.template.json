@@ -1,0 +1,13 @@
+{
+  "application": "LegxusAI",
+  "environment": "studio",
+  "networkAlias": "studionet",
+  "chainId": 61999,
+  "rpcUrl": "https://studio.genlayer.com/api",
+  "explorerUrl": "https://genlayer-explorer.vercel.app",
+  "contractAddress": null,
+  "deploymentTxHash": null,
+  "genlayerCliVersion": "0.39.2",
+  "genlayerJsVersion": "1.1.8",
+  "genvmRunner": "1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6"
+}

@@ -1,4 +1,4 @@
-# LegxusAI - AI Dispute Resolution & Prediction Markets on GenLayer
+# LegxusAI
 
 This project is called LegxusAI - **AI-powered dispute resolution and prediction markets, built on GenLayer.**
 
@@ -54,7 +54,31 @@ legxusai/
 
 The frontend is a React + TypeScript + Vite application. The contracts are written in Python using GenLayer's SDK, calling things like `gl.get_webpage()` to pull in live data and `gl.exec_prompt()` to run LLM reasoning directly inside contract execution.
 
----
+```bash
+npm run genlayer -- network set studionet
+npm run genlayer -- network set testnet-bradbury
+```
+
+Select only the alias matching the active development or release-validation environment. These commands modify CLI configuration and are not run automatically by the application.
+
+## Environment
+
+Create local environment configuration from the names in `.env.example`:
+
+```dotenv
+VITE_GENLAYER_ENV=studio
+VITE_DISPUTE_CONTRACT_ADDRESS=
+```
+
+Accepted browser environment values are `studio` and `bradbury`. The independently verified Studio address is recorded in `deployments/studio.json`; use it only with `VITE_GENLAYER_ENV=studio`. A contract address for any other environment must remain empty until independently verified there. Python/CLI-oriented checks use `GENLAYER_ENV` explicitly in the command and should select the same target as `VITE_GENLAYER_ENV`.
+
+The Python configuration can be checked without invoking a global CLI:
+
+```bash
+GENLAYER_ENV=studio python3 -c "from config import get_config; print(get_config()['network']['alias'])"
+```
+
+No private key, mnemonic, keystore, or raw-key deployment helper belongs in this repository.
 
 ## Current state of the project
 
@@ -62,7 +86,19 @@ Being upfront about where things stand: the three Intelligent Contracts are full
 
 This was a deliberate choice while the UI and UX were being built out. The next milestone is deploying the contracts to GenLayer's Bradbury testnet and wiring the frontend up to `genlayer-js` for real reads and writes.
 
----
+Open `http://localhost:5173`.
+
+Run the deterministic frontend adapter and evidence tests, then build the frontend with:
+
+```bash
+npm test
+npm run test:sdk
+npm run test:filing
+npm run typecheck
+npm audit --omit=dev
+npm audit --audit-level=high
+npm run build
+```
 
 ## Running it locally
 
@@ -87,7 +123,7 @@ genlayer deploy --contract contracts/LegxusIntelligentOracle.py
 
 Then update the deployed addresses in `src/lib/store.tsx`.
 
----
+## Architecture
 
 ## Tech stack
 

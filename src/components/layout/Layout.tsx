@@ -1,20 +1,22 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Scale, TrendingUp, Search, Code2, ChevronLeft, ChevronRight, Wallet, LogOut, Hexagon, Zap, X, CheckCircle, AlertTriangle, Info } from 'lucide-react'
+import { LayoutDashboard, Scale, Search, Code2, ChevronLeft, ChevronRight, Wallet, LogOut, Hexagon, Zap, X, CheckCircle, AlertTriangle, Info } from 'lucide-react'
 import { useApp } from '../../lib/store'
+import { GENLAYER_CONFIG, getNetworkLabel } from '../../lib/genlayer/config'
 
 const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/disputes', icon: Scale, label: 'Disputes' },
-  { to: '/predictions', icon: TrendingUp, label: 'Predictions' },
-  { to: '/explorer', icon: Search, label: 'TX Explorer' },
-  { to: '/contracts', icon: Code2, label: 'Contracts' },
+  { to: '/explorer', icon: Search, label: 'Transactions' },
+  { to: '/contracts', icon: Code2, label: 'Dispute Contract' },
 ]
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
-  const { wallet, connectWallet, disconnectWallet, notifications, dismissNotification, hasInjectedWallet } = useApp()
+  const { wallet, connectWallet, disconnectWallet, notifications, dismissNotification, hasInjectedWallet, disputeLoad } = useApp()
   const navigate = useNavigate()
+  const targetNetwork = GENLAYER_CONFIG.network
+  const walletChainVerified = !!wallet.address && !!targetNetwork && wallet.chainId === targetNetwork.chainId
 
   return (
     <div className="flex h-screen bg-void overflow-hidden">
@@ -70,15 +72,13 @@ export default function Layout() {
                     </div>
                     <button onClick={disconnectWallet} className="text-slate-500 hover:text-red-400 transition-colors"><LogOut size={13} /></button>
                   </div>
-                  <div className="flex gap-4">
-                    <div>
-                      <div className="font-mono text-xs text-neon-cyan font-bold">{wallet.genBalance}</div>
-                      <div className="font-mono text-[9px] text-slate-500">GEN</div>
-                    </div>
-                    <div>
-                      <div className="font-mono text-xs text-white font-bold">{wallet.ethBalance}</div>
-                      <div className="font-mono text-[9px] text-slate-500">ETH</div>
-                    </div>
+                  <div className="font-mono text-[9px] text-slate-500 uppercase tracking-wider">Wallet address detected</div>
+                  <div className={`font-mono text-[9px] mt-1 ${walletChainVerified ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                    {walletChainVerified
+                      ? `Selected chain verified (${wallet.chainId})`
+                      : wallet.chainId === null
+                        ? 'Wallet chain not verified'
+                        : `Wallet chain ${wallet.chainId}; target ${targetNetwork?.chainId ?? 'unset'}`}
                   </div>
                 </>
               ) : (
@@ -112,8 +112,10 @@ export default function Layout() {
           style={{ borderBottom: '1px solid #1c2a4a', background: 'rgba(8,13,28,0.95)' }}>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
             style={{ background: 'rgba(0,245,255,0.05)', border: '1px solid rgba(0,245,255,0.1)' }}>
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono text-xs text-emerald-400">GenLayer Testnet · Bradbury</span>
+            <div className={`w-2 h-2 rounded-full ${disputeLoad.phase === 'ready' || disputeLoad.phase === 'empty' ? 'bg-emerald-400' : disputeLoad.phase === 'cached' ? 'bg-yellow-400' : 'bg-red-400'}`} />
+            <span className={`font-mono text-xs ${targetNetwork ? 'text-neon-cyan' : 'text-yellow-400'}`}>
+              {getNetworkLabel()} · {disputeLoad.phase.replace('-', ' ')}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             {!wallet.address && (
