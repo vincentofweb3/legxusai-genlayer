@@ -1,82 +1,58 @@
 # LegxusAI
 
-LegxusAI is a focused dispute-adjudication application built for GenLayer Intelligent Contracts. The browser exposes filing, respondent acceptance or decline, and named-party evaluation requests through an injected wallet. Every accepted write is validated through the configured GenLayer receipt/trace route before the application refreshes canonical dispute state from the contract.
+This project is called LegxusAI - **AI-powered dispute resolution and prediction markets, built on GenLayer.**
 
-This release scope is advisory only. It does not receive, escrow, transfer, release, refund, or pay out GEN or any other asset. It also does not present prediction markets, a general-purpose oracle, or application-level appeal state as working GenLayer protocol functionality.
+LegxusAI is an experiment in replacing slow, expensive, and often biased dispute resolution with something faster and more transparent: AI validators that read evidence, reason about it, and reach a verdict - all recorded on-chain. The same underlying mechanism also powers self-resolving prediction markets, where an AI oracle reads real-world data to settle YES/NO questions without any human in the loop.
 
-## Why GenLayer
+This project is built on top of [GenLayer](https://genlayer.com), a blockchain that introduces something called **Intelligent Contracts** - smart contracts that can run LLM reasoning and fetch live data from the web as part of their execution, not just work with data that's already on-chain.
 
-Disputes often depend on unstructured descriptions and external evidence that ordinary deterministic contracts cannot interpret directly. GenLayer is relevant because an Intelligent Contract can perform nondeterministic reasoning and reach a consensus-backed result.
+---
 
-The repository is being remediated in controlled phases. The browser verifies public GitHub raw references, records their hashes and metadata, and keeps independent contract-side retrieval inside the GenVM nondeterministic leader/validator boundary. Protocol-appeal work remains explicitly deferred.
+## Why this exists
 
-## Current Scope
+Think about how many disagreements happen every day that have no fast or fair way to get resolved. A freelancer doesn't get paid. A buyer claims a product was never delivered. An NFT sale skips its royalty payment. A bug bounty gets disputed. Right now, the options are limited - expensive legal routes, a platform's opaque support ticket, or just eating the loss.
 
-Included:
+Prediction markets have a related problem. They need someone trustworthy to decide the outcome, and centralized resolvers introduce a single point of failure.
 
-- Dispute filing UI with verified public evidence references, injected-wallet signing, receipt validation, canonical identifier decoding, and post-write state refresh.
-- Role- and status-gated respondent acceptance/decline controls and claimant/respondent evaluation requests.
-- Contract-side GenVM leader/validator evaluation; the browser neither retrieves evaluation evidence nor computes an outcome locally.
-- Typed `genlayer-js` public reads and injected-provider writes for the dispute contract.
-- Shared, non-secret Studio and Bradbury environment configuration for frontend and Python/CLI workflows.
-- Transaction and contract views without fabricated network totals or deployment facts.
-- Advisory result language throughout the application.
+LegxusAI tackles both of these with the same idea: instead of relying on a person or a centralized authority, let a decentralized network of AI validators independently analyze the evidence and vote. If they agree, that becomes the binding outcome.
 
-Not included as working functionality:
+---
 
-- Prediction markets or general-purpose oracle contracts.
-- GEN escrow, settlement, fees, stakes, or payouts.
-- GenLayer protocol appeals.
-- Complete network transaction history. The contract exposes canonical dispute state, but not a complete transaction index; the Explorer shows only locally retained hashes that are revalidated against GenLayer.
-- Private browser-file upload, arbitrary providers, and claims of permanent storage or availability.
-- Bradbury deployment or Bradbury lifecycle evidence. The verified public lifecycle below is scoped to the Studio demonstration only.
+## How it actually works
 
-## Verified Studio Lifecycle
+1. **A dispute gets filed** - title, description, the other party's wallet address, the amount at stake, and any supporting evidence (invoices, screenshots, links, IPFS files).
 
-The following receipt-backed path has been independently verified for `DSP-0001` on GenLayer Studio:
+2. **AI validators take over** - GenLayer's validator network activates. Each validator independently reads the evidence, fetches any linked web pages, and reasons through the case using an LLM.
 
-`file_dispute` → respondent `accept_dispute` → GenVM `evaluate` → receipt validation → canonical `FINALIZED` state.
+3. **Consensus decides the outcome** - this is the important part. No single AI's opinion is treated as final. GenLayer's consensus mechanism, called **Optimistic Democracy**, requires validators to commit their answers, then reveal them, and checks whether a clear majority agrees. If they do, that's the verdict.
 
-| Step | Public transaction hash | Verified result |
-|---|---|---|
-| Filing | `0x0d3c289df8bd3c2f141e9ff2e26858a5a0c766759b767b50f12d7d9574d1ed20` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; decodes to `DSP-0001` |
-| Respondent acceptance | `0xb81751f7e393bdd2267ce6b2fc64d60263a23f481ef991c7db2154b4e55aa15f` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; strict return `true` |
-| GenVM evaluation | `0x0935963f09eeb8f83816a54e7526915d2345311e8535914473a8b09ad23e0dea` | `FINALIZED` / `MAJORITY_AGREE` / `FINISHED_WITH_RETURN`; agreed outcome `UNDETERMINED` |
+4. **The verdict is locked in** - written on-chain with a confidence score. Funds move automatically based on the outcome. If someone disagrees, they can stake GEN tokens to formally appeal, which restarts the process with a larger validator set.
 
-The demonstration uses Studio `studionet` (chain `61999`) and the public deployment manifest [deployments/studio.json](deployments/studio.json). The reviewed application verifier checkpoint is `ba5cbcad44fc0a35819fde0f5f9cc3b40d94d1a9`; the deployment manifest separately records the reviewed deployed-source commit. These hashes are public verification evidence, not credentials.
+Prediction markets follow the exact same pattern - instead of resolving a dispute, the AI reads the sources you provide (a price feed, a news site, an official announcement) and determines whether the market resolves YES or NO.
 
-Fresh canonical reads after evaluation return `DISPUTE_STATE_V3`, exactly `DSP-0001`, `status=FINALIZED`, `criteria_status=RESPONDENT_ACCEPTED`, a non-empty evaluation timestamp, and `verdict=UNDETERMINED`. The evaluated record reports `AVAILABLE` evidence, one available and zero failed references, `INSUFFICIENT_EVIDENCE`, source error `NONE`, confidence bucket `0`, and `INSUFFICIENT` evidence sufficiency.
+---
 
-This is a bounded advisory demonstration. It does not claim Bradbury deployment, protocol appeals, escrow, settlement, fees, bonds, stakes, payouts, transfers, or a complete network transaction index. Public GitHub evidence remains subject to repository retention, access, provider availability, and network availability limits.
+## What's in this repo
 
-## Network And Toolchain
-
-The pinned official CLI and SDK expose these selected targets:
-
-| Purpose | Application value | CLI alias | Chain ID |
-|---|---|---|---:|
-| Development | `studio` | `studionet` | `61999` |
-| Release validation | `bradbury` | `testnet-bradbury` | `4221` |
-
-Exact tool versions verified and pinned during Phase 1:
-
-- GenLayer CLI: `0.39.2`
-- `genlayer-js`: `1.1.8`
-- GenVM runner: `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6`
-
-The repository-owned source is `config/genlayer_config.json`. `src/lib/genlayer/config.ts` consumes it and checks the selected chain ID against `genlayer-js`; `config/genlayer_config.py` exposes the same data to Python and CLI-oriented tooling. The active environment must be explicit, and unknown or empty values fail as not configured.
-
-The CLI is an exact local development dependency, so project commands do not depend on a machine-global installation. Install dependencies and inspect the pinned CLI with:
-
-```bash
-npm ci
-npm ls genlayer genlayer-js --depth=0
-npm run genlayer -- --help
-npm run genlayer -- network list
-npm run genlayer -- network info
+```
+legxusai/
+├── contracts/                        # GenLayer Intelligent Contracts, written in Python
+│   ├── LegxusDisputeResolution.py    # Handles filing, AI verdicts, and appeals
+│   ├── LegxusPredictionMarket.py     # Market creation, staking, and resolution
+│   └── LegxusIntelligentOracle.py    # General-purpose price/event/compliance oracle
+│
+├── src/
+│   ├── pages/                        # Landing page, dashboard, disputes, predictions, explorer, contracts
+│   ├── components/layout/            # Sidebar + topbar shell
+│   ├── lib/store.tsx                 # Shared app state (wallet, disputes, predictions, transactions)
+│   └── styles/                       # Tailwind config + global styles
+│
+├── package.json
+├── vite.config.ts
+└── tailwind.config.js
 ```
 
-The machine-global Windows CLI shim observed from WSL during review is not part of this project workflow. Run the repository-local command in the same Node/npm environment that installed `node_modules`. After checking `npm run genlayer -- network --help`, the verified target-selection forms are:
+The frontend is a React + TypeScript + Vite application. The contracts are written in Python using GenLayer's SDK, calling things like `gl.get_webpage()` to pull in live data and `gl.exec_prompt()` to run LLM reasoning directly inside contract execution.
 
 ```bash
 npm run genlayer -- network set studionet
@@ -104,12 +80,11 @@ GENLAYER_ENV=studio python3 -c "from config import get_config; print(get_config(
 
 No private key, mnemonic, keystore, or raw-key deployment helper belongs in this repository.
 
-## Run Locally
+## Current state of the project
 
-```bash
-npm ci
-npm run dev
-```
+Being upfront about where things stand: the three Intelligent Contracts are fully written and reflect real GenLayer SDK patterns, but they are **not yet deployed** to GenLayer's testnet. The frontend currently runs on a simulated data layer - filing a dispute or staking on a market triggers a realistic transaction lifecycle animation and updates the UI everywhere it should, but no real on-chain calls happen yet.
+
+This was a deliberate choice while the UI and UX were being built out. The next milestone is deploying the contracts to GenLayer's Bradbury testnet and wiring the frontend up to `genlayer-js` for real reads and writes.
 
 Open `http://localhost:5173`.
 
@@ -125,131 +100,91 @@ npm audit --audit-level=high
 npm run build
 ```
 
-`npm test` is the aggregate deterministic gate: it runs the SDK/client/receipt/hydration/lifecycle tests and the evidence tests. `tests/sdk/lifecycle.test.ts` covers typed acceptance, decline, and evaluation writes with mocked SDK/provider clients; it is not labeled as live GenLayer integration. `npm run test:filing` is also available as the focused pre-signing boundary check. The live evidence-policy check uses Node's built-in test runner:
+## Running it locally
 
 ```bash
-RUN_EVIDENCE_NETWORK=1 npm run test:evidence
+npm install
+npm run dev
 ```
 
-This command is an explicitly labeled live-provider check and requires network access. It retrieves only the pinned public fixture and does not print its body. The official direct-mode and read-only integration tests use Python 3.12 and the repository's exact dependency constraints:
+Then open `http://localhost:5173`.
+
+### Deploying the contracts (once you're ready to go live)
 
 ```bash
-python3 --version  # 3.12.x
-python3 -m pip install --constraint constraints.txt -r requirements.txt
-python3 scripts/check_dependency_pins.py --installed
-PYTHONPATH=. python3 -m pytest tests/direct -v
-PYTHONPATH=. python3 -m pytest tests/integration -v -m integration -rs
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
-rm -rf -- artifacts .pytest_cache
-find contracts tests config -type d -name __pycache__ -prune -exec rm -rf -- {} +
-bash scripts/check_repository_hygiene.sh
+npm install -g @genlayer/cli
+genlayer init
+genlayer up
+
+genlayer deploy --contract contracts/LegxusDisputeResolution.py --args 100
+genlayer deploy --contract contracts/LegxusPredictionMarket.py --args 50
+genlayer deploy --contract contracts/LegxusIntelligentOracle.py
 ```
 
-As of `2026-09-04T02:22:57Z`, after a clean `npm ci` against the npm registry, `npm audit --omit=dev` reported zero vulnerabilities and `npm audit --audit-level=high` exited successfully with no high or critical findings. This is a time-stamped validation result, not a permanent guarantee; rerun both commands because registry advisories can change. The corrected install resolves `browserslist@4.28.8` and `postcss-selector-parser@6.1.3` through the root overrides. The same validation retained two moderate development-only advisories on `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`; that CLI-only path is outside the browser production tree, and forcing a transitive UUID major override would change the pinned GenLayer toolchain without upstream compatibility evidence. `requirements.txt` pins the reviewed GenLayer package commits and exact test/tool versions; `constraints.txt` pins their resolved public dependencies. Direct mode validates contract behavior in memory, while `tests/integration/` performs read-only checks against the reviewed Studio hashes and canonical state. Integration tests skip only when DNS, TLS, socket, timeout, or temporary gateway transport is unavailable; malformed JSON/RPC errors, missing receipts, receipt mismatches, and canonical-state mismatches remain test failures. The integration suite never signs, deploys, or mutates network state. Do not treat the deleted standalone fake runtime as protocol evidence. Python validation may create ignored `artifacts/`, `__pycache__/`, or `.pytest_cache/` output; remove those directories before the hygiene check.
+Then update the deployed addresses in `src/lib/store.tsx`.
 
 ## Architecture
 
-```text
-React application
-  -> shared public project configuration
-  -> typed environment and wallet-chain checks
-  -> verified public evidence policy
-  -> typed file / accept / decline / evaluate operations
-  -> configured Studio leader-receipt or Bradbury trace validation
-  -> LegxusDisputeResolution Intelligent Contract
-  -> GenVM leader/validator evaluation
-  -> canonical dispute state refresh and advisory record
-```
+## Tech stack
 
-Current trust boundaries and known gaps:
+| Layer | What's used |
+|---|---|
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS |
+| Charts | Recharts |
+| Routing | React Router v6 |
+| State | React Context (a single shared store) |
+| Contracts | Python, GenLayer SDK (GenVM) |
+| Wallet | MetaMask / any injected Web3 wallet |
 
-- Canonical dispute reads are authoritative. Local storage is limited to a versioned, network/contract/state-scoped cache used only when a canonical refresh is unavailable.
-- The filing identifier is decoded from a verified `file_dispute` return value; no `get_total()+1` prediction is used.
-- Lifecycle operations read the canonical dispute, then immediately re-read the injected provider's selected account and chain ID before constructing the official SDK wallet client. The respondent alone may accept or decline an `AWAITING_RESPONDENT` dispute; only its claimant or respondent may evaluate a `READY_FOR_EVALUATION` dispute. The contract repeats these authorization checks.
-- Every lifecycle success requires an `ACCEPTED` or `FINALIZED` full transaction with an agreeing consensus result and `FINISHED_WITH_RETURN`. The adapter separately queries triggered transaction IDs and rejects emitted messages/child transactions. Return decoding is selected only from the configured network: Studio uses `consensus_data.leader_receipt`; Bradbury uses hash-bound `debugTraceTransaction({ hash, round: 0 })`, requiring a matching `transaction_id`, `result_code === 0`, and non-empty hexadecimal `return_data` before GenLayer calldata decoding. The routes never silently substitute for one another.
-- Filing strictly decodes the returned canonical dispute identifier. Acceptance and decline strictly require `true`; evaluation strictly allows only `CLAIMANT_UPHELD`, `RESPONDENT_UPHELD`, or `UNDETERMINED`.
-- The filing form accepts only verified GitHub raw commit references; failed pre-sign verification aborts the write and keeps the selected references available for retry/removal. Evidence-free filing requires explicit confirmation.
-- Respondent acceptance reuses the same evidence policy and immediately reverifies selected references before signing. Evidence-free acceptance requires explicit confirmation and signs exactly `[]`.
-- Successful lifecycle writes retain the full transaction hash and trigger a canonical contract-state refresh. The UI does not use a timer, local counter, optimistic verdict, or latest-record match to manufacture state.
-- Transaction hashes are retained only as a scoped convenience index. A fresh browser can reconstruct disputes from `get_all_disputes`, but cannot reconstruct a complete historical transaction list because the contract does not expose one.
-- Validator participation and protocol appeal information are intentionally omitted from the UI until sourced from canonical protocol data.
+---
 
-## Evidence Policy
+## What makes GenLayer different
 
-Phase 3 uses `GITHUB_RAW_COMMIT_SHA256_V1`. A submitted reference must be an HTTPS URL on `raw.githubusercontent.com`, pinned to a lowercase 40-character Git commit SHA, with no credentials, query, fragment, redirect, or mutable branch path. The browser retrieves the bytes before submission and records the exact URL, SHA-256 hash, normalized MIME type, byte size, schema version, provider, and derived source identifier. The contract validates that metadata and independently retrieves and verifies the same bytes inside `run_nondet_unsafe` for both leader and validator execution.
+Most oracles can only relay data that's already structured and predefined - a price feed, a fixed API response. GenLayer's Intelligent Contracts can go further: they can read a webpage written in plain English, a contract in prose, or a description of an event, and reason about what it actually means, then turn that into a deterministic on-chain decision. That's what makes something like AI-resolved disputes possible in the first place - the contract isn't just executing rules, it's interpreting the real world.
 
-At most three claimant references and three respondent references are accepted, with six references total. Each reference is a text, JSON, or XML resource no larger than 2,000 UTF-8 bytes; the complete accepted body is passed to the model. Duplicate URLs and duplicate hashes are rejected within and across parties. Browser redirects are rejected before signing; contract-side 3xx behavior is classified as a redirect source failure. HTTP errors, timeouts, unavailable sources, empty or oversized bodies, unsupported media, changed bytes, and metadata mismatches are explicit failures. Evidence-free filing requires an explicit user confirmation; a failed selected-reference verification aborts before signing.
+---
 
-Evidence URLs, hashes, metadata, and dispute context become public contract data. Submit only material already intended for public GitHub visibility. A commit-pinned URL binds the bytes to a repository revision, but it does not guarantee indefinite provider retention: repository deletion, access changes, provider outages, or network failure can still make retrieval unavailable. This release remains advisory-only; evidence storage, protocol appeals, and settlement are separate concerns.
+## Links
 
-See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, failure taxonomy, verification sequence, and test coverage. See [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md) for the public Studio evidence and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the trust-boundary model.
-
-## Deployment Manifest Shape
-
-`deployments/studio.json` records the independently verified Studio deployment tied to source commit `33286c8f57f2bc0b517ccf1a1ec457f040e13ee1`. The template files retain null deployment fields and are not proof of another deployment. A reviewed manifest may contain only public deployment evidence:
-
-- application and environment name;
-- CLI network alias, chain ID, RPC, and explorer URL;
-- public contract address and deployment transaction hash;
-- CLI, SDK, and GenVM runner versions.
-
-Credential material is never a manifest field. The manifest establishes deployment facts; the separate receipt-backed filing, acceptance, evaluation, and canonical-state evidence for `DSP-0001` is documented in [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md). See [deployments/README.md](deployments/README.md) for the deployment-record boundary.
-
-## Project Structure
-
-```text
-contracts/
-  LegxusDisputeResolution.py
-config/
-  genlayer_config.json
-  genlayer_config.py
-deployments/
-  studio.json
-  studio.template.json
-  bradbury.template.json
-src/
-  components/layout/Layout.tsx
-  lib/evidence/filing.ts
-  lib/evidence/upload.ts
-  lib/genlayer/config.ts
-  lib/genlayer/client.ts
-  lib/genlayer/types.ts
-  lib/genlayer/disputes.ts
-  lib/genlayer/transactions.ts
-  lib/genlayer.ts
-  lib/store.tsx
-  pages/
-    Dashboard.tsx
-    DisputesPage.tsx
-    FileDisputePage.tsx
-    ExplorerPage.tsx
-    ContractsPage.tsx
-tests/
-  direct/test_dispute_resolution.py
-  integration/conftest.py
-  integration/test_studio_lifecycle.py
-  sdk/client.test.ts
-  sdk/types.test.ts
-  sdk/transactions.test.ts
-  sdk/hydration.test.ts
-  sdk/lifecycle.test.ts
-  evidence/filing.test.ts
-  evidence/upload.test.ts
-docs/
-  evidence-policy.md
-  GENLAYER_VALIDATION.md
-  ARCHITECTURE.md
-scripts/
-  check_dependency_pins.py
-  check_repository_hygiene.sh
-```
-
-## References
-
-- [GenLayer documentation](https://docs.genlayer.com)
+- [GenLayer Docs](https://docs.genlayer.com)
 - [GenLayer Studio](https://studio.genlayer.com)
-- [GenLayer CLI](https://github.com/genlayerlabs/genlayer-cli)
-- [genlayer-js](https://github.com/genlayerlabs/genlayer-js)
-- [GenVM](https://github.com/genlayerlabs/genvm)
+- [genlayer-js SDK](https://github.com/genlayerlabs/genlayer-js)
+- [Live demo](https://legxusai-genlayer.vercel.app)
+
+---
+
+## A note on the name
+
+
+__________________________
+
+## Quick Start
+
+```bash
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**
+
+---
+
+## What's Fixed in v2.0
+
+- Global app state - disputes, predictions, transactions all connected
+- Real MetaMask wallet connection (no more random addresses)
+- File upload works - click or drag & drop evidence files
+- Submitting a dispute adds it live to the disputes list + dashboard
+- Staking on predictions updates YES/NO bars + volume in real time
+- Create Market modal fully functional
+- TX Explorer updates live when any action happens anywhere
+- Status badges show full text (no more "PROPOSIN", "FINALIZE" cutoffs)
+- Dashboard Recent Disputes + Live Transactions pull from real store
+- AI verdict simulated 12s after dispute is filed
+- Footer fully built out with 4 columns of links
+- All action buttons use consistent glassy style (no more loud cyan pills)
+- Empty states on every page
+- Brand: LegxusAI throughout
+
+---
