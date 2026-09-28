@@ -354,6 +354,52 @@ PATH="$PWD/.venv/bin:$PATH" GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-r
 
 The GenVM strict typecheck requires `.venv/bin` on `PATH` because it shells out to the pinned `pyright`. Running it against `.venv/bin/python` without an activated environment fails with `pyright not found`.
 
+### The direct-mode tests run the pinned runner, not an approximation
+
+This is worth stating explicitly, because "in-memory direct mode" can reasonably be read as a mock. It is not one. The 32 tests in `tests/direct/` execute the contract against the **byte-exact GenVM runner hash the contract header pins**.
+
+The chain is:
+
+1. `genlayer-test` `0.29.2` registers a `pytest11` entry point named `gltest_direct`, pointing at `gltest.direct.pytest_plugin`. Verify with `.venv/bin/python -c "import importlib.metadata as m; print([e.value for e in m.distribution('genlayer-test').entry_points if e.name=='gltest_direct'])"`.
+2. That plugin's `direct_deploy` fixture delegates to `gltest.direct.loader.deploy_contract`, which at `loader.py:46-47` calls `setup_sdk_paths(contract_path, sdk_version)`.
+3. `gltest.direct.sdk_loader` reads the **contract's own header**. Its regex is `"Depends":\s*"([^:]+):([^"]+)"` (`sdk_loader.py:44-45`), which matches `contracts/LegxusDisputeResolution.py:1` directly. The runner to use is not hardcoded in the test suite; it is derived from the contract under test.
+4. Transitive dependencies are resolved by parsing each runner's own `runner.json` (`sdk_loader.py:226-238`). The `py-genlayer` runner manifest declares `py-lib-genlayer-std:11rhn002…`, `py-lib-cloudpickle:1dlk6mnf…`, and `cpython:1bk9g3zg…`.
+5. Resolved runners are inserted at the front of `sys.path` (`sdk_loader.py:293-294`), which is what makes the `genlayer` module importable *only* inside a direct-test session.
+
+The result is directly observable:
+
+```bash
+.venv/bin/python -c "import genlayer"
+# ModuleNotFoundError: No module named 'genlayer'
+```
+
+This failure outside pytest is expected, not a broken environment. It is the signature of a runtime that is assembled per-test from the contract's declared pins rather than being a site-wide install.
+
+And the resolved runner on disk matches the contract header exactly:
+
+```bash
+ls ~/.cache/gltest-direct/extracted/v0.3.0-rc7/py-genlayer/
+# 1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6
+
+ls ~/.cache/gltest-direct/extracted/v0.3.0-rc7/py-lib-genlayer-std/
+# 11rhn002yfajawsz7fai6mykznbxkxs6l91iskj5cm82c92qhy3v
+```
+
+The first is the hash pinned at `contracts/LegxusDisputeResolution.py:1` and recorded as `genvmRunner` in `deployments/studio.json`. The second is the transitive standard library that the first declares.
+
+This closes the loop with section 4. The equivalence rules and the `SCORE_BUCKET_TOLERANCE` bound are asserted against a specific runtime, and the direct suite runs against that exact runtime — so a behavioral change in GenLayer cannot silently invalidate the test suite the way it could against a stub.
+
+To see the pin extracted from the contract header yourself:
+
+```bash
+.venv/bin/python -c "
+import re, pathlib
+c = pathlib.Path('contracts/LegxusDisputeResolution.py').read_text()
+print([f'{m.group(1)}:{m.group(2)}' for m in re.finditer(r'\"Depends\":\s*\"([^:]+):([^\"]+)\"', c)])
+"
+# ['py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6']
+```
+
 ---
 
 ## 8. The real client read/write path from the frontend
