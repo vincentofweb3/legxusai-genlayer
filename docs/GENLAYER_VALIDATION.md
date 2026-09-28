@@ -15,6 +15,15 @@ This document records the independently verified public Studio demonstration. It
 
 The checkpoint identifies the application adapter and tests used for verification. The manifest identifies deployed source and public deployment facts. Neither contains credentials.
 
+### Deployed contract vs. reviewing adapter
+
+The deployed contract and the reviewing adapter are two different artifacts at two different commits, and the difference is deliberate:
+
+- The **deployed** `LegxusDisputeResolution.py` is from source commit `33286c8f57f2bc0b517ccf1a1ec457f040e13ee1`. That file is byte-identical to the current `contracts/LegxusDisputeResolution.py`; both hash to `sha256 5ce02d7a02abc502be3bce65cffdd3da2f72c20cbe79c0bf36d5817e2dfd67c5`, the `sourceSha256` recorded in the manifest.
+- The **reviewing adapter** is the browser-side receipt validator at `src/lib/genlayer/transactions.ts`. The Studio quorum-short-circuit handling was added later, in commit `ba5cbcad44fc0a35819fde0f5f9cc3b40d94d1a9`, which touched only `src/lib/genlayer/transactions.ts` and `tests/sdk/`. It did not change the contract.
+
+So the receipt invariants recorded below were observed on a deployment whose contract is unchanged from `33286c8`, and are now re-validated by an adapter that is strictly more restrictive than a validator that ignored validator errors outright: it admits a `CONSENSUS_VALIDATOR_QUORUM_REACHED` validator entry only when all five marker fields match exactly (`mode`, `execution_result`, `vote`, `result.status`, `genvm_result.error_code`), and treats every other validator error as fatal. The behavior in this record was produced *by* that narrower adapter, and the real `accept_dispute` receipt exhibits exactly that condition, so the later adapter change makes the record more precisely checkable rather than less.
+
 ## Public transaction evidence
 
 All three transactions were verified through the Studio receipt route. The adapter requires a full transaction-hash binding, an accepted or finalized status, an agreeing consensus result, a finished return, valid GenLayer calldata, no emitted messages, and no triggered child transactions.
