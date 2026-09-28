@@ -21,6 +21,7 @@ report_zero() {
 count_paths() {
   find . -path './.git' -prune -o \
     -path './node_modules' -prune -o \
+    -path './.venv' -prune -o \
     "$@" -print 2>/dev/null | wc -l | tr -d ' '
 }
 
@@ -29,6 +30,7 @@ count_matches() {
   (rg -l --hidden --no-ignore-vcs \
     --glob '!.git/**' \
     --glob '!node_modules/**' \
+    --glob '!.venv/**' \
     --glob '!scripts/check_repository_hygiene.sh' \
     -- "$pattern" . 2>/dev/null || true) | wc -l | tr -d ' '
 }

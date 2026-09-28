@@ -3,6 +3,7 @@ dist/
 artifacts/
 __pycache__/
 *.pyc
+.venv/
 
 .env
 .env.*

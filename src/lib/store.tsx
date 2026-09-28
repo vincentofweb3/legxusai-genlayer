@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { GENLAYER_CONFIG } from './genlayer/config.ts'
 import {
+  WalletNetworkError,
   WalletStateError,
   getPublicClient,
   readInjectedAccounts,
   readInjectedChainId,
+  subscribeInjectedWallet,
+  switchInjectedNetwork,
   type BrowserProvider,
 } from './genlayer/client.ts'
 import {
@@ -100,6 +103,8 @@ interface AppStore {
   addNotification: (notification: Omit<Notification, 'id'>) => void
   dismissNotification: (id: string) => void
   isProcessing: boolean
+  isSwitchingNetwork: boolean
+  switchWalletNetwork: () => Promise<void>
   processingHash: string | null
   processingStatus: TxStatus | null
   lastAction: LastActionState
@@ -206,6 +211,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   })
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
   const [processingHash, setProcessingHash] = useState<string | null>(null)
   const [processingStatus, setProcessingStatus] = useState<TxStatus | null>(null)
   const [lastAction, setLastAction] = useState<LastActionState>({ operation: null, disputeId: null, status: null, hash: null, message: null })
@@ -330,19 +336,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const injected = provider()
-    if (!injected?.on || !injected.removeListener) return
-    const refreshWallet = () => {
-      void readWallet(injected)
-        .then(snapshot => setWallet(current => ({ ...current, ...snapshot, isConnecting: false })))
-        .catch(() => setWallet({ address: null, chainId: null, isConnecting: false }))
-    }
-    injected.on('accountsChanged', refreshWallet)
-    injected.on('chainChanged', refreshWallet)
-    return () => {
-      injected.removeListener?.('accountsChanged', refreshWallet)
-      injected.removeListener?.('chainChanged', refreshWallet)
-    }
-  }, [])
+    return subscribeInjectedWallet(
+      injected,
+      snapshot => setWallet(current => ({ ...current, ...snapshot, isConnecting: false })),
+      error => {
+        setWallet(current => ({
+          ...current,
+          ...(error.kind === 'account' ? { address: null } : {}),
+          ...(error.kind === 'chain' ? { chainId: null } : {}),
+          isConnecting: false,
+        }))
+        addNotification({
+          type: 'error',
+          title: 'Wallet State Unavailable',
+          message: error.message,
+        })
+      },
+    )
+  }, [addNotification])
 
   const connectWallet = useCallback(async () => {
     const injected = provider()
@@ -376,6 +387,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const disconnectWallet = useCallback(() => {
     setWallet({ address: null, chainId: null, isConnecting: false })
     addNotification({ type: 'info', title: 'Session Cleared', message: 'Remove this site in the wallet to revoke its account permission.' })
+  }, [addNotification])
+
+  const switchWalletNetwork = useCallback(async () => {
+    const target = GENLAYER_CONFIG.network
+    const injected = provider()
+    if (GENLAYER_CONFIG.configurationIssue || !target) {
+      const error = new WalletNetworkError('provider', GENLAYER_CONFIG.configurationIssue ?? 'The GenLayer target network is not configured.')
+      addNotification({ type: 'error', title: 'GenLayer Target Not Configured', message: error.message })
+      throw error
+    }
+    if (!injected) {
+      const error = new WalletNetworkError('provider', 'An injected EIP-1193 wallet provider is required to switch networks.')
+      addNotification({ type: 'error', title: 'Injected Wallet Required', message: error.message })
+      throw error
+    }
+
+    setIsSwitchingNetwork(true)
+    try {
+      await switchInjectedNetwork(injected, target)
+      const snapshot = await readWallet(injected)
+      setWallet({ ...snapshot, isConnecting: false })
+      addNotification({
+        type: 'success',
+        title: 'Network Switched',
+        message: `Wallet is now connected to ${target.label} (chain ${target.chainId}).`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The wallet network could not be changed.'
+      addNotification({
+        type: error instanceof WalletNetworkError && error.kind === 'rejected' ? 'warning' : 'error',
+        title: error instanceof WalletNetworkError && error.kind === 'rejected' ? 'Network Request Rejected' : 'Network Switch Failed',
+        message,
+      })
+      throw error
+    } finally {
+      setIsSwitchingNetwork(false)
+    }
   }, [addNotification])
 
   const addDispute = useCallback(async (draft: DisputeDraft): Promise<string> => {
@@ -541,6 +589,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       disputeLoad,
       refreshCanonicalState,
       addDispute,
+      switchWalletNetwork,
       acceptDispute,
       declineDispute,
       evaluateDispute,
@@ -550,6 +599,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addNotification,
       dismissNotification,
       isProcessing,
+      isSwitchingNetwork,
       processingHash,
       processingStatus,
       lastAction,

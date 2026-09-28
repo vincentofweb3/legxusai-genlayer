@@ -66,12 +66,25 @@ npm run build
 
 As of `2026-09-04T02:22:57Z`, after a clean `npm ci` against the npm registry, the production audit (`npm audit --omit=dev`) reported zero vulnerabilities and the complete-tree high-threshold audit (`npm audit --audit-level=high`) exited successfully with no high or critical findings. This is a time-stamped validation result, not a permanent guarantee; rerun both commands against the current registry. The corrected lockfile resolves `browserslist@4.28.8` and `postcss-selector-parser@6.1.3`. The validation retained two moderate development-only findings at `genlayer@0.39.2 -> dockerode@4.0.12 -> uuid@10.0.0`; they do not enter the browser production tree, and the pinned GenLayer CLI is retained instead of applying an unverified transitive UUID major override. Re-evaluate this exception when a reviewed CLI release updates the Docker dependency path.
 
-Install the pinned Python/GenLayer toolchain before running the direct, integration, and GenVM gates:
+Install the pinned Python/GenLayer toolchain before running the direct, integration, and GenVM gates. Use an isolated environment so the pinned versions cannot be affected by system packages:
 
 ```bash
 python3 --version
-python3 -m pip install --constraint constraints.txt -r requirements.txt
-python3 scripts/check_dependency_pins.py --installed
+python3 -m venv .venv
+.venv/bin/python -m pip install --constraint constraints.txt -r requirements.txt
+.venv/bin/python scripts/check_dependency_pins.py --installed
+```
+
+The GenVM strict typecheck shells out to `pyright`, so `.venv/bin` must be on `PATH` for that one command. Running it against `.venv/bin/python` without an activated environment fails with `pyright not found`:
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+```
+
+Activating the environment (`source .venv/bin/activate`) makes every command below work unmodified, including the typecheck:
+
+```bash
+source .venv/bin/activate
 ```
 
 The direct contract, read-only Studio integration, and GenVM gates are:
