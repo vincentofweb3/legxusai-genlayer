@@ -2,6 +2,22 @@
 
 LegxusAI is a focused dispute-adjudication application built for GenLayer Intelligent Contracts. The browser exposes filing, respondent acceptance or decline, and named-party evaluation requests through an injected wallet. Every accepted write is validated through the configured GenLayer receipt/trace route before the application refreshes canonical dispute state from the contract.
 
+## Addressing the Previous Review
+
+A Portal Steward previously rejected an earlier version of this project with this feedback:
+
+> The application currently simulates GenLayer transactions and verdicts in browser state instead of calling the submitted contracts. Add a real GenLayer client read/write path for the dispute and prediction workflows, and remove or clearly isolate the simulated deployed activity.
+
+That is no longer the architecture. The core dispute lifecycle is a real `genlayer-js` read/write path against a deployed contract, and the earlier simulated activity is gone rather than merely hidden:
+
+| Steward concern | Current state | Where to verify |
+|---|---|---|
+| Transactions simulated in browser state | Writes are submitted through the injected wallet and the official SDK `writeContract`; no local transaction or verdict is ever fabricated. | [src/lib/genlayer/disputes.ts](src/lib/genlayer/disputes.ts), [src/lib/genlayer/transactions.ts](src/lib/genlayer/transactions.ts) |
+| Verdicts computed in the browser | The browser never retrieves evaluation evidence or computes an outcome. Only the contract's GenVM `run_nondet_unsafe` leader/validator execution produces an advisory result, and the UI decodes that return value. | [contracts/LegxusDisputeResolution.py](contracts/LegxusDisputeResolution.py) (`evaluate`), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Simulated deployed activity | The verified lifecycle for `DSP-0001` is backed by three public GenLayer Studio transaction hashes and a canonical read of the deployed contract, recorded in the manifest. | [Verified Studio Lifecycle](#verified-studio-lifecycle), [deployments/studio.json](deployments/studio.json), [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md) |
+
+The feedback also asked for a read/write path for prediction workflows. LegxusAI does not implement a prediction market, oracle, or any other speculative-market contract, and this README does not claim one. What exists is the dispute-adjudication read/write path, described above, on a real GenLayer client. The technical complexity behind it is documented in [docs/COMPLEXITY.md](docs/COMPLEXITY.md).
+
 This release scope is advisory only. It does not receive, escrow, transfer, release, refund, or pay out GEN or any other asset. It also does not present prediction markets, a general-purpose oracle, or application-level appeal state as working GenLayer protocol functionality.
 
 ## Why GenLayer
@@ -133,15 +149,28 @@ RUN_EVIDENCE_NETWORK=1 npm run test:evidence
 
 This command is an explicitly labeled live-provider check and requires network access. It retrieves only the pinned public fixture and does not print its body. The official direct-mode and read-only integration tests use Python 3.12 and the repository's exact dependency constraints:
 
+Use an isolated environment so the pinned versions cannot be affected by system packages:
+
 ```bash
 python3 --version  # 3.12.x
-python3 -m pip install --constraint constraints.txt -r requirements.txt
-python3 scripts/check_dependency_pins.py --installed
-PYTHONPATH=. python3 -m pytest tests/direct -v
-PYTHONPATH=. python3 -m pytest tests/integration -v -m integration -rs
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
-GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 python3 -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+python3 -m venv .venv
+.venv/bin/python -m pip install --constraint constraints.txt -r requirements.txt
+.venv/bin/python scripts/check_dependency_pins.py --installed
+```
+
+The GenVM strict typecheck shells out to `pyright`, so `.venv/bin` must be on `PATH` for that one command. Running it against `.venv/bin/python` without an activated environment fails with `pyright not found`:
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 .venv/bin/python -m genvm_linter.cli typecheck contracts/LegxusDisputeResolution.py --strict
+```
+
+Activating the environment (`source .venv/bin/activate`) makes every command below work unmodified:
+
+```bash
+PYTHONPATH=. .venv/bin/python -m pytest tests/direct -v
+PYTHONPATH=. .venv/bin/python -m pytest tests/integration -v -m integration -rs
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 .venv/bin/python -m genvm_linter.cli check contracts/LegxusDisputeResolution.py
+GENVM_REPO=genlayerlabs/genvm GENVM_VERSION=v0.3.0-rc7 .venv/bin/python -m genvm_linter.cli schema contracts/LegxusDisputeResolution.py
 rm -rf -- artifacts .pytest_cache
 find contracts tests config -type d -name __pycache__ -prune -exec rm -rf -- {} +
 bash scripts/check_repository_hygiene.sh
@@ -184,11 +213,11 @@ At most three claimant references and three respondent references are accepted, 
 
 Evidence URLs, hashes, metadata, and dispute context become public contract data. Submit only material already intended for public GitHub visibility. A commit-pinned URL binds the bytes to a repository revision, but it does not guarantee indefinite provider retention: repository deletion, access changes, provider outages, or network failure can still make retrieval unavailable. This release remains advisory-only; evidence storage, protocol appeals, and settlement are separate concerns.
 
-See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, failure taxonomy, verification sequence, and test coverage. See [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md) for the public Studio evidence and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the trust-boundary model.
+See [docs/evidence-policy.md](docs/evidence-policy.md) for the exact schema, failure taxonomy, verification sequence, and test coverage. See [docs/COMPLEXITY.md](docs/COMPLEXITY.md) for where GenLayer nondeterminism occurs, how the leader retrieves external evidence, how validator equivalence and the Studio quorum short-circuit are handled, why the two receipt routes are not interchangeable, and which command proves each claim. See [docs/GENLAYER_VALIDATION.md](docs/GENLAYER_VALIDATION.md) for the public Studio evidence and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the trust-boundary model.
 
 ## Deployment Manifest Shape
 
-`deployments/studio.json` records the independently verified Studio deployment tied to source commit `33286c8f57f2bc0b517ccf1a1ec457f040e13ee1`. The template files retain null deployment fields and are not proof of another deployment. A reviewed manifest may contain only public deployment evidence:
+`deployments/studio.json` records the independently verified Studio deployment tied to source commit `33286c8f57f2bc0b517ccf1a1ec457f040e13ee1`. That commit's `contracts/LegxusDisputeResolution.py` is byte-identical to the current one: both hash to `sha256 5ce02d7a02abc502be3bce65cffdd3da2f72c20cbe79c0bf36d5817e2dfd67c5`, the value recorded as `sourceSha256` in the manifest. Reproduce it with `sha256sum contracts/LegxusDisputeResolution.py`. The template files retain null deployment fields and are not proof of another deployment. A reviewed manifest may contain only public deployment evidence:
 
 - application and environment name;
 - CLI network alias, chain ID, RPC, and explorer URL;
